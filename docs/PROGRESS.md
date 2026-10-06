@@ -180,3 +180,16 @@ Decisions and milestone check output. Newest at the bottom.
 - Checks (headless Chromium, fake camera): pipeline 20.5 Hz at the camera step (≥ 8 asserted), 61 samples in a 3 s read
   (> 20 asserted; was 1), exactly one `<video>` across setup → read, drift/next-case flow continues. Playwright 6 passed.
 - **Open:** the human recalibrates with the new pump; record the new accuracy here. 266.5 px stands as the pre-fix number.
+
+## Lag with live tracking (human report, 2026-10-06)
+
+- Cause: face landmarks + BlazeGaze run on the main thread (~40 ms/frame); once the pump delivered frames at full rate
+  the viewer lost its budget. The library's worker proxy is unusable here (CDN URLs baked in), so the fix is load
+  management, not a thread move.
+- Fixes: MediaPipe `VIDEO` running mode (`detectForVideo`: tracks between frames instead of re-detecting — cheaper);
+  the pump watches its own rAF gaps and backs the inference rate off toward `degraded_hz` when the UI drops below
+  ~40 fps, recovering when smooth; defaults `target_hz` 30→20, `degraded_hz` 15→8; the camera-step face message no
+  longer re-renders per sample. UI fps and achieved Hz are logged to the console at each case end.
+- Check (headless Chromium, software GPU, fake camera — landmarker running, no face so BlazeGaze idle): viewer 50.4 fps
+  while panning with gaze at 20.5 Hz; 64 samples in a 3 s read. Playwright 6 passed. Real-laptop numbers with a face
+  in view will be lower for gaze Hz (the guard trades gaze rate for viewer smoothness) — ask the human.

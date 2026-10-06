@@ -3,7 +3,7 @@
 // CDN URLs in its own FaceLandmarkerClient. Mouse-move training does not exist in this library; click training is
 // opt-in through `trainOnClicks` and routed through handleClick().
 import type { FaceBox, GazeProvider, ProviderInitOptions, RawGaze } from '../types';
-import { boxFromLandmarks, faceLuminance, openCamera, pumpFrames, stopCamera } from './camera';
+import { boxFromLandmarks, faceLuminance, openCamera, pumpFrames, stopCamera, type Pump } from './camera';
 
 type GazeResult = { facialLandmarks: { x: number; y: number }[]; eyePatch: ImageData; headVector: number[]; faceOrigin3D: number[]; gazeState: 'open' | 'closed'; normPog: number[]; durations: Record<string, number>; timestamp: number };
 
@@ -22,7 +22,7 @@ export class WebEyeTrackProvider implements GazeProvider {
   private wet: Wet | null = null;
   private video: HTMLVideoElement | null = null;
   private stream: MediaStream | null = null;
-  private stopPump: (() => void) | null = null;
+  private pump: Pump | null = null;
   private frameCanvas = document.createElement('canvas');
   private smallCanvas = document.createElement('canvas');
   private onSample: ((s: RawGaze) => void) | null = null;
@@ -32,6 +32,8 @@ export class WebEyeTrackProvider implements GazeProvider {
   private clickHandler: ((e: MouseEvent) => void) | null = null;
   /** measured pipeline latency (frame capture → result), ms, EMA */
   latencyMs = 0;
+  /** UI frame rate as seen by the pump (median rAF gap), for logging */
+  get uiFps() { return this.pump?.uiFps ?? 0; }
   lastDurations: Record<string, number> = {};
 
   async init(video: HTMLVideoElement, opts: ProviderInitOptions): Promise<void> {
@@ -41,11 +43,16 @@ export class WebEyeTrackProvider implements GazeProvider {
     const fileset = await vision.FilesetResolver.forVisionTasks(`${base}/mediapipe/wasm`);
     const landmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetPath: `${base}/mediapipe/face_landmarker.task`, delegate: 'GPU' },
-      outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true, runningMode: 'IMAGE', numFaces: 1,
+      outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true, runningMode: 'VIDEO', numFaces: 1,
     });
+    // VIDEO mode tracks the face between frames instead of re-detecting it every frame: much cheaper on the main thread.
+    let lastTs = 0;
     const wet = new WebEyeTrack(24, 120) as unknown as Wet; // keep up to 24 support sets (9 calib + clicks), click TTL 120 s
     // swap in a landmarker that uses local assets; the library's own client would fetch from a CDN
-    wet.faceLandmarkerClient = { initialize: async () => {}, processFrame: async (frame: ImageData) => landmarker.detect(frame) };
+    wet.faceLandmarkerClient = {
+      initialize: async () => {},
+      processFrame: async (frame: ImageData) => { lastTs = Math.max(lastTs + 1, Math.round(performance.now())); return landmarker.detectForVideo(frame, lastTs); },
+    };
     await wet.initialize(); // loads BlazeGaze from <origin>/web/model.json (served from vendor/models/web)
     this.wet = wet;
     this.stream = await openCamera(video);
@@ -59,7 +66,7 @@ export class WebEyeTrackProvider implements GazeProvider {
     const video = this.video, wet = this.wet;
     const ctx = this.frameCanvas.getContext('2d', { willReadFrequently: true })!;
     const sctx = this.smallCanvas.getContext('2d', { willReadFrequently: true })!;
-    this.stopPump = pumpFrames(video, () => this.hz, async (ts) => {
+    this.pump = pumpFrames(video, { targetHz: this.opts?.targetHz ?? 20, minHz: this.opts?.minHz ?? 8 }, async (ts) => {
       if (video.videoWidth === 0) return;
       if (this.frameCanvas.width !== video.videoWidth) { this.frameCanvas.width = video.videoWidth; this.frameCanvas.height = video.videoHeight; }
       ctx.drawImage(video, 0, 0);
@@ -68,10 +75,7 @@ export class WebEyeTrackProvider implements GazeProvider {
       const t1 = performance.now();
       this.latencyMs = this.latencyMs ? this.latencyMs * 0.9 + (t1 - ts) * 0.1 : t1 - ts;
       this.lastDurations = r.durations;
-      // adaptive rate: if the pipeline cannot keep up, degrade toward 15 Hz rather than stall the UI thread
-      const total = r.durations?.total ?? 0;
-      if (total > 1000 / this.hz && this.hz > 15) this.hz = Math.max(15, this.hz - 1);
-      else if (total < 500 / this.hz && this.hz < (this.opts?.targetHz ?? 30)) this.hz += 1;
+      this.hz = this.pump?.hz ?? this.hz; // rate is governed by the pump's jank guard
       let face: FaceBox | undefined;
       const hasFace = r.facialLandmarks && r.facialLandmarks.length > 0;
       if (hasFace) {
@@ -101,7 +105,7 @@ export class WebEyeTrackProvider implements GazeProvider {
   }
 
   async stop(): Promise<void> {
-    this.stopPump?.(); this.stopPump = null;
+    this.pump?.stop(); this.pump = null;
     if (this.clickHandler) document.removeEventListener('click', this.clickHandler, true);
     if (this.video) stopCamera(this.video, this.stream);
     this.stream = null; this.onSample = null;

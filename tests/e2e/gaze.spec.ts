@@ -74,13 +74,34 @@ test('live pipeline keeps running through calibration and a read (dev mode, fake
   console.log('[gaze] validation (fake camera, no face):', JSON.stringify((meta as { validation: unknown }).validation));
   await page.getByTestId('cal-continue').click();
   await expect(page.getByText('Case 1 of')).toBeVisible();
-  await page.waitForTimeout(3000);
+  // UI frame rate while panning WITH the live pipeline running (headless software GPU: a pessimistic environment)
+  const stage = page.locator('.stage');
+  const box = (await stage.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -600);
+  await page.evaluate(() => {
+    const w = window as unknown as { __fps: { frames: number; t0: number; done: boolean; fps: number } };
+    w.__fps = { frames: 0, t0: performance.now(), done: false, fps: 0 };
+    const loop = () => { w.__fps.frames++; if (performance.now() - w.__fps.t0 < 3000) requestAnimationFrame(loop); else { w.__fps.done = true; w.__fps.fps = w.__fps.frames / ((performance.now() - w.__fps.t0) / 1000); } };
+    requestAnimationFrame(loop);
+  });
+  const t0 = Date.now();
+  while (Date.now() - t0 < 3000) {
+    const x0 = box.x + 150, y0 = box.y + 150;
+    await page.mouse.move(x0, y0); await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(x0 + i * 20, y0 + i * 12);
+    await page.mouse.up();
+  }
+  await page.waitForFunction(() => (window as unknown as { __fps: { done: boolean } }).__fps.done);
+  const live = await page.evaluate(() => ({ fps: (window as unknown as { __fps: { fps: number } }).__fps.fps, hz: (window as unknown as { __gazeSession: { inferenceHz: number } }).__gazeSession.inferenceHz }));
+  console.log(`[perf] LIVE pipeline: viewer ${live.fps.toFixed(1)} fps while panning, gaze ${live.hz.toFixed(1)} Hz (jank guard active)`);
+  expect(live.fps).toBeGreaterThanOrEqual(30);
   const n = await page.evaluate(() => document.querySelectorAll('video').length);
   expect(n).toBe(1); // the session-long element survived the setup screen unmounting
   const [req] = await Promise.all([page.waitForRequest((r) => r.url().includes('/submit')), page.keyboard.press('n')]);
   const body = req.postDataJSON();
   console.log(`[gaze] samples recorded during a 3 s read: ${body.gaze.length} (meta hz ${body.gaze_meta.inference_hz})`);
-  expect(body.gaze.length).toBeGreaterThan(20); // was 1 before the fix
+  expect(body.gaze.length).toBeGreaterThan(20); // was 1 before the fix (now ≥ 6 s of samples at ≥ 8 Hz)
   await expect(page.getByRole('heading', { name: /Reveal/ })).toBeVisible();
   await page.getByTestId('next').click();
   await expect(page.getByText('Case 2 of').or(page.getByText(/drift check/i))).toBeVisible({ timeout: 15_000 });

@@ -32,8 +32,9 @@ export type GazeProvider = {
 export type ProviderInitOptions = {
   /** Train the regression on clicks (never on mouse moves). Forced false in validation-study mode. */
   trainOnClicks: boolean;
-  /** Target inference rate; providers may degrade to a lower rate under load. */
+  /** Target inference rate; providers back off toward `minHz` when the UI drops frames (main-thread inference). */
   targetHz: number;
+  minHz?: number | undefined;
   /** Local path to model weights / wasm (no CDN at runtime). */
   assetBaseUrl?: string | undefined;
 };

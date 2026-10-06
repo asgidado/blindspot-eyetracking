@@ -26,7 +26,8 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
   const [step, setStep] = useState<Step>(drift ? 'drift' : 'starting');
   const [err, setErr] = useState<string | null>(null);
   const [session, setSession] = useState<GazeSession | null>(drift ?? null);
-  const [face, setFace] = useState<{ ok: boolean; msg: string }>({ ok: false, msg: 'Looking for your face…' });
+  const [face, setFaceState] = useState<{ ok: boolean; msg: string }>({ ok: false, msg: 'Looking for your face…' });
+  const setFace = (f: { ok: boolean; msg: string }) => setFaceState((prev) => (prev.ok === f.ok && prev.msg === f.msg ? prev : f)); // no re-render per sample
   const [dot, setDot] = useState<Pt | null>(null);
   const [progress, setProgress] = useState('');
   const [metrics, setMetrics] = useState<ReturnType<typeof validationMetrics> | null>(null);
@@ -63,7 +64,7 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
       const video = videoRef.current ?? createGazeVideo();
       videoRef.current = video;
       const order = (gcfg.providers.order as string[]).filter((p) => p !== 'mock') as ('webeyetrack' | 'webgazer')[];
-      const res = await selectProvider(order, video, { trainOnClicks: base.train_on_clicks, targetHz: gcfg.providers.target_hz, assetBaseUrl: '' }, addLog);
+      const res = await selectProvider(order, video, { trainOnClicks: base.train_on_clicks, targetHz: gcfg.providers.target_hz, minHz: gcfg.providers.degraded_hz, assetBaseUrl: '' }, addLog);
       if (unmountedRef.current) { if ('provider' in res) void res.provider.stop(); return; } // left the screen: release the camera
       if ('error' in res) { setErr(res.error.message + (res.tried.length > 1 ? ` (tried ${res.tried.join(', ')})` : '')); setStep('error'); return; }
       const g = new GazeSession(res.provider, { ...base, provider: res.provider.id, provider_version: res.provider.version }, sessOpts, { debug }).expose();

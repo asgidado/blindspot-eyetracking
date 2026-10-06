@@ -78,6 +78,8 @@ export class GazeSession {
     const samples = this.buffer.drain();
     this.buffer.stop(); this.buffer = null;
     const lat = (this.provider as unknown as { latencyMs?: number }).latencyMs;
+    const ui = (this.provider as unknown as { uiFps?: number }).uiFps;
+    if (ui) console.info(`[gaze] ui ≈ ${ui.toFixed(0)} fps, inference ≈ ${this.inferenceHz.toFixed(1)} Hz`);
     this.meta = { ...this.meta, inference_hz: Math.round(this.inferenceHz * 10) / 10, ...(lat ? { pipeline_latency_ms: Math.round(lat) } : {}) };
     return { samples, meta: this.meta };
   }

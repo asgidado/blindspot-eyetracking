@@ -46,13 +46,19 @@ export function boxFromLandmarks(lm: { x: number; y: number }[], vw: number, vh:
 
 /**
  * Frame pump. Grabs frames on a requestAnimationFrame loop whenever `video.currentTime` has advanced, rate-limited to
- * `hz()`. Chrome throttles requestVideoFrameCallback (and sometimes decoding) for video elements that are tiny, hidden
- * or detached — the hidden-preview case during calibration and reading — which starved the pipeline (3.5 Hz measured).
- * drawImage() still sees fresh camera frames, so the rAF loop is the source of frames; rVFC, when available, only
- * supplies a more precise capture timestamp (§4.4.3) for the frame we are about to process.
+ * the current rate. Chrome throttles requestVideoFrameCallback for tiny/hidden/detached video elements (the hidden
+ * preview during calibration and reading), which starved the pipeline (3.5 Hz measured); drawImage() still sees fresh
+ * frames, so rAF is the source of frames and rVFC only refines the capture timestamp (§4.4.3).
+ *
+ * Jank guard: inference runs on the main thread, so the pump watches its own rAF gaps. When the UI drops below ~40 fps
+ * (median gap > 25 ms over the last ticks) the rate backs off toward `minHz`; when the UI is smooth it recovers toward
+ * `targetHz`. The viewer keeps its frame budget before gaze keeps its sample rate.
  */
-export function pumpFrames(video: HTMLVideoElement, hz: () => number, onFrame: (ts: number) => Promise<void> | void): () => void {
-  let stopped = false, last = 0, busy = false, lastMediaTime = -1;
+export type Pump = { stop(): void; readonly hz: number; readonly uiFps: number };
+
+export function pumpFrames(video: HTMLVideoElement, rate: { targetHz: number; minHz: number }, onFrame: (ts: number) => Promise<void> | void): Pump {
+  let stopped = false, last = 0, busy = false, lastMediaTime = -1, hz = rate.targetHz, prevTick = 0;
+  const gaps: number[] = [];
   let capture: { ts: number; at: number } | null = null;
   const v = video as HTMLVideoElement & { requestVideoFrameCallback?: (cb: (now: number, meta: { captureTime?: number; presentationTime?: number; mediaTime: number }) => void) => number };
   const rvfc = () => {
@@ -60,17 +66,24 @@ export function pumpFrames(video: HTMLVideoElement, hz: () => number, onFrame: (
     v.requestVideoFrameCallback((now, meta) => { capture = { ts: meta.captureTime ?? meta.presentationTime ?? now, at: performance.now() }; rvfc(); });
   };
   rvfc();
+  const medianGap = () => { const a = [...gaps].sort((x, y) => x - y); return a.length ? a[a.length >> 1]! : 16; };
   const loop = async () => {
     if (stopped) return;
     const now = performance.now();
-    if (!busy && video.readyState >= 2 && video.currentTime !== lastMediaTime && now - last >= 1000 / hz() - 2) {
+    if (prevTick) { gaps.push(now - prevTick); if (gaps.length > 20) gaps.shift(); }
+    prevTick = now;
+    if (gaps.length >= 10) {
+      const g = medianGap();
+      if (g > 25) hz = Math.max(rate.minHz, hz - 1); // UI below ~40 fps: back off
+      else if (g < 19 && hz < rate.targetHz) hz += 0.25; // smooth: recover slowly
+    }
+    if (!busy && video.readyState >= 2 && video.currentTime !== lastMediaTime && now - last >= 1000 / hz - 2) {
       lastMediaTime = video.currentTime; last = now; busy = true;
-      // capture-time stamp when rVFC gave us one for a frame presented in the last 60 ms, else "now" (≤ 1 frame late)
       const ts = capture && now - capture.at < 60 ? capture.ts : now;
       try { await onFrame(ts); } finally { busy = false; }
     }
     requestAnimationFrame(() => void loop());
   };
   requestAnimationFrame(() => void loop());
-  return () => { stopped = true; };
+  return { stop() { stopped = true; }, get hz() { return hz; }, get uiFps() { return 1000 / medianGap(); } };
 }

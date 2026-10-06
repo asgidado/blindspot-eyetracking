@@ -3,8 +3,8 @@
 
 providers:
   order: [webeyetrack, webgazer, mock]   # first that initialises wins; mock = no camera (demo/CI)
-  target_hz: 30                           # inference rate; webcams rarely exceed 30 fps
-  degraded_hz: 15                         # drop to this before letting the viewer stutter (< 50 fps)
+  target_hz: 20                           # inference runs on the main thread (~40 ms/frame); 20 Hz is the realistic ceiling
+  degraded_hz: 8                          # the pump backs off toward this when the viewer drops below ~40 fps, recovers when smooth
   train_on_clicks: true                   # providers learn from clicks (never from mouse moves); forced false in study mode
   asset_base_url: /vendor/models          # model weights/wasm served locally; no CDN at runtime
 
