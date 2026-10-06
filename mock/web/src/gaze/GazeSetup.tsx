@@ -64,7 +64,7 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
       const video = videoRef.current ?? createGazeVideo();
       videoRef.current = video;
       const order = (gcfg.providers.order as string[]).filter((p) => p !== 'mock') as ('webeyetrack' | 'webgazer')[];
-      const res = await selectProvider(order, video, { trainOnClicks: base.train_on_clicks, targetHz: gcfg.providers.target_hz, minHz: gcfg.providers.degraded_hz, assetBaseUrl: '' }, addLog);
+      const res = await selectProvider(order, video, { trainOnClicks: base.train_on_clicks, targetHz: gcfg.providers.target_hz, minHz: gcfg.providers.degraded_hz, assetBaseUrl: location.origin }, addLog);
       if (unmountedRef.current) { if ('provider' in res) void res.provider.stop(); return; } // left the screen: release the camera
       if ('error' in res) { setErr(res.error.message + (res.tried.length > 1 ? ` (tried ${res.tried.join(', ')})` : '')); setStep('error'); return; }
       const g = new GazeSession(res.provider, { ...base, provider: res.provider.id, provider_version: res.provider.version }, sessOpts, { debug }).expose();

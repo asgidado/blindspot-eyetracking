@@ -47,9 +47,12 @@ test('live gaze path: local models load, camera step or plain-language error, co
     const v = await page.evaluate(() => { const vs = document.querySelectorAll('video'); const v = vs[0] as HTMLVideoElement; return { n: vs.length, hasStream: !!v?.srcObject, playing: !!v && !v.paused, w: v?.videoWidth ?? 0, inWrap: !!v?.closest('.video-wrap') }; });
     console.log('[gaze] video element:', JSON.stringify(v));
     expect(v.n).toBe(1); expect(v.hasStream).toBe(true); expect(v.inWrap).toBe(true); expect(v.w).toBeGreaterThan(0);
+    // first inference compiles shaders in the worker (slow on a software GPU): wait for the first sample, then measure
+    await page.waitForFunction(() => (window as unknown as { __gazeSession: { inferenceHz: number } }).__gazeSession.inferenceHz > 0, null, { timeout: 30_000 });
     await page.waitForTimeout(3000);
     const hz = await page.evaluate(() => (window as unknown as { __gazeSession: { inferenceHz: number } }).__gazeSession.inferenceHz);
-    console.log(`[gaze] pipeline rate at the camera step: ${hz.toFixed(1)} Hz`);
+    const dbg = await page.evaluate(() => { const g = (window as unknown as { __gazeSession: { provider: { hz: number; latencyMs: number; lastDurations: Record<string, number> } } }).__gazeSession; return { pumpHz: g.provider.hz, latency: Math.round(g.provider.latencyMs), dur: g.provider.lastDurations }; });
+    console.log(`[gaze] pipeline rate at the camera step: ${hz.toFixed(1)} Hz · pump ${dbg.pumpHz.toFixed(1)} Hz · latency ${dbg.latency} ms · worker ${JSON.stringify(dbg.dur)}`);
     expect(hz).toBeGreaterThanOrEqual(8); // was 3.5 Hz with the throttled rVFC pump
   }
   await page.getByRole('button', { name: 'Continue without gaze' }).click();

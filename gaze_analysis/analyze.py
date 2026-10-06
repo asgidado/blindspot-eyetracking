@@ -165,7 +165,10 @@ def _timeline(
         return {"bin_ms": bin_ms, "rows": {}}
     t_end = samples[-1]["t"] + 33
     nb = int(t_end // bin_ms) + 1
-    rows = {z: [0.0] * nb for z in list(hard) + ["other_lung"]}
+    extra = [
+        z for z in ("cardiac_silhouette",) if z in zones
+    ]  # shown on its own row; everything else non-review → other_lung
+    rows = {z: [0.0] * nb for z in list(hard) + extra + ["other_lung"]}
     from .masks import point_in
 
     for s0, s1 in zip(samples, samples[1:] + [None], strict=False):
@@ -190,5 +193,5 @@ def _timeline(
         if not placed:
             z = zone_of(zones, s0["x"], s0["y"])
             if z is not None and z not in hard:
-                rows["other_lung"][b] += dt / bin_ms
+                rows[z if z in extra else "other_lung"][b] += dt / bin_ms
     return {"bin_ms": bin_ms, "rows": {z: [round(min(1.0, v), 3) for v in vals] for z, vals in rows.items()}}

@@ -35,6 +35,18 @@ def main() -> int:
         print(f"wasm: {len(list(dst.iterdir()))} files in {dst}")
     else:
         print("wasm: node_modules/@mediapipe/tasks-vision missing — run npm install first", file=sys.stderr)
+    # library bundles for the classic Web Worker (loaded with importScripts; served from /lib/)
+    lib = VENDOR / "lib"
+    lib.mkdir(parents=True, exist_ok=True)
+    for src, name in (
+        (ROOT / "node_modules" / "webeyetrack" / "dist" / "index.js", "webeyetrack.js"),
+        (ROOT / "node_modules" / "@mediapipe" / "tasks-vision" / "vision_bundle.cjs", "vision_bundle.cjs"),
+    ):
+        if src.exists():
+            shutil.copy2(src, lib / name)
+            print(f"lib  {name} ({(lib / name).stat().st_size} B)")
+        else:
+            print(f"lib  {name}: source missing ({src})", file=sys.stderr)
     for rel, url in FILES.items():
         p = VENDOR / rel
         if p.exists() and p.stat().st_size > 0:

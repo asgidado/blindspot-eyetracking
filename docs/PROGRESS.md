@@ -243,3 +243,22 @@ Decisions and milestone check output. Newest at the bottom.
   good ≤ 80 screen px, coarse ≤ 220 screen px (≈ 300 image px at fit), `zone_sigma_max` 300 image px. A 212 px
   session is therefore "coarse": gaze supplies zone-level coverage and the scanpath, cursor supplies miss types,
   every gaze number still carries its ±px. Previously that session was "poor" and gaze contributed nothing.
+
+## Reading-room lag + "bouncing" replay (human report, 2026-10-06, late)
+
+- Lag root cause: synchronous GPU readbacks on the UI thread (`getImageData` of a 1280×720 frame, TF.js `arraySync`)
+  stall the main thread until the GPU drains everything queued — including the viewer's own canvas work. Calibration
+  did not lag because nothing else was drawing. Fix: the whole pipeline now runs in a **classic Web Worker**
+  (`packages/gaze-web/worker/webeyetrack.worker.js`): MediaPipe (VIDEO mode) + WebEyeTrack from local assets
+  (`/lib/webeyetrack.js`, `/lib/vision_bundle.cjs`, copied by `make setup`), frames arrive as transferable
+  ImageBitmaps (`createImageBitmap(video)` — GPU-side, no readback on the UI thread), landmarks/head matrix come back
+  for the iris estimator, few-shot `adapt` and click training happen in the worker. Camera frames still never leave the
+  browser. The library's own worker proxy could not be used (CDN URLs baked in; `adapt()` not exposed — their issue #6).
+- "Back and forth between two positions": the library's constant-velocity Kalman overshoots after a saccade and the
+  output is clamped at the screen edge → ringing between an edge and the target. Replaced by a one-euro filter on the
+  main thread (no overshoot; unit-tested). The heart is not a review area and had no timeline row, so looking at it
+  was invisible there: a "cardiac silhouette (not a review area)" row was added.
+- Checks (headless, fake camera, worker): viewer **60 fps while panning with the live pipeline on** (was 49–58 on the
+  main-thread version and visibly laggy for the human); 20 Hz pump, 23.5 Hz results after warm-up, 75 ms capture→result
+  latency, landmarker 15.6 ms/frame in the worker; 64 samples in a 3 s read; `make build` emits the worker asset.
+  Playwright 6 passed. Human to confirm on the laptop.
