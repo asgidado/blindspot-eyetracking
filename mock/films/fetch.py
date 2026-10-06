@@ -220,9 +220,12 @@ def lung_masks_xrv(img: np.ndarray):
     with torch.no_grad():
         pred = model(torch.from_numpy(x)[None, None]).squeeze(0).numpy()
     names = model.targets
-    up = lambda k: cv2.resize(
-        (pred[names.index(k)] > 0.5).astype(np.uint8), (W, H), interpolation=cv2.INTER_NEAREST
-    ).astype(bool)  # noqa: E731
+
+    def up(k: str) -> np.ndarray:
+        return cv2.resize(
+            (pred[names.index(k)] > 0.5).astype(np.uint8), (W, H), interpolation=cv2.INTER_NEAREST
+        ).astype(bool)
+
     # XRV names are in image frame: "Left Lung" is the lung on image left? XRV follows radiological convention
     # (anatomical left = image right). We assign by mean x to be safe: smaller mean x = patient right.
     a, b = up("Left Lung"), up("Right Lung")

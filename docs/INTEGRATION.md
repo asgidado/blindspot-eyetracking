@@ -108,12 +108,24 @@ from gaze_analysis.analyze import analyze_case
 from gaze_analysis.config import GazeAnalysisConfig
 from gaze_analysis.cursor_proxy import CursorDwellConfig
 
-cfg = GazeAnalysisConfig.from_yaml_dicts(gaze_yaml, review_hardness, zone_human, visit_ms=300, recognition_from_ms=300, decision_from_ms=1000)
-an = analyze_case(gaze=attempt.gaze, gaze_meta=session.gaze_meta, telemetry=attempt.telemetry,
-                  zones=zone_masks, rois=finding_roi_masks,                 # H×W bool, ROI = mask dilated by ρ
-                  finding_info={fid: {"label": ..., "zone": ..., "outcome": ...}},
-                  cfg=cfg, cursor_cfg=CursorDwellConfig(**scoring_yaml["cursor_dwell"]),
-                  img_w=W, img_h=H, fit_scale=fit_scale, submit_ms=read_ms, first_mark_ms=first_mark_ms)
+cfg = GazeAnalysisConfig.from_yaml_dicts(
+    gaze_yaml, review_hardness, zone_human, visit_ms=300, recognition_from_ms=300, decision_from_ms=1000
+)
+an = analyze_case(
+    gaze=attempt.gaze,
+    gaze_meta=session.gaze_meta,
+    telemetry=attempt.telemetry,
+    zones=zone_masks,
+    rois=finding_roi_masks,  # H×W bool, ROI = mask dilated by ρ
+    finding_info={fid: {"label": ..., "zone": ..., "outcome": ...}},
+    cfg=cfg,
+    cursor_cfg=CursorDwellConfig(**scoring_yaml["cursor_dwell"]),
+    img_w=W,
+    img_h=H,
+    fit_scale=fit_scale,
+    submit_ms=read_ms,
+    first_mark_ms=first_mark_ms,
+)
 ```
 
 `an["gaze_used"]` is false when gaze is absent or < 5 clean samples — fall back to the cursor path unchanged.
@@ -124,7 +136,11 @@ an = analyze_case(gaze=attempt.gaze, gaze_meta=session.gaze_meta, telemetry=atte
 g = an["gaze"]["finding"][fid] if an["gaze_used"] else None
 use_gaze = g is not None and g["resolution"] == "lesion" and session.gaze_meta["quality_tier"] == "good"
 miss_type = g["miss_type"] if use_gaze else cursor_miss_type
-attempt.finding_attribution[fid] = {"cursor": cursor_miss_type, "gaze": g, "chosen": "gaze" if use_gaze else "cursor"}
+attempt.finding_attribution[fid] = {
+    "cursor": cursor_miss_type,
+    "gaze": g,
+    "chosen": "gaze" if use_gaze else "cursor",
+}
 ```
 
 Gaze contributes finding-level types **only** at `lesion` resolution and `good` quality; otherwise it contributes
