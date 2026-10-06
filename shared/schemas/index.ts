@@ -29,6 +29,8 @@ export type GazeSessionMeta = {
   validation: { accuracy_px: number; precision_px: number; loss_pct: number; n_points: number };
   calibration: { n_points: number; face_box: { w: number; h: number }; face_lum?: number };
   camera?: { width: number; height: number };
+  estimator?: string;
+  alternatives?: Record<string, { accuracy_px: number; precision_px: number }>;
   quality_tier: QualityTier;
   px_per_cm?: number;
   pipeline_latency_ms?: number;

@@ -56,6 +56,11 @@ class Calibration(_Strict):
     face_lum: float | None = None
 
 
+class AltMetrics(_Strict):
+    accuracy_px: float
+    precision_px: float
+
+
 class DriftCheck(_Strict):
     case_index: int
     error_px: float
@@ -70,6 +75,8 @@ class GazeSessionMeta(_Strict):
     validation: Validation
     calibration: Calibration
     camera: Screen | None = None
+    estimator: str | None = None
+    alternatives: dict[str, AltMetrics] | None = None
     quality_tier: QualityTier
     px_per_cm: float | None = None
     pipeline_latency_ms: float | None = None

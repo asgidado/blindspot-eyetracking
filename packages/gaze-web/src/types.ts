@@ -3,8 +3,9 @@ export type { GazeSample, GazeSessionMeta, QualityTier, ProviderId, Vp } from '.
 
 export type FaceBox = { x: number; y: number; w: number; h: number; lum?: number };
 
-/** A raw provider estimate in CLIENT (viewport) px, timestamped at frame capture. */
-export type RawGaze = { tClient: number; sx: number; sy: number; valid: boolean; face?: FaceBox };
+/** A raw provider estimate in CLIENT (viewport) px, timestamped at frame capture. `alt` is a second estimator's
+ *  estimate for the same frame (validation compares them and the app picks one); buffers ignore it. */
+export type RawGaze = { tClient: number; sx: number; sy: number; valid: boolean; face?: FaceBox; alt?: { id: string; sx: number; sy: number } };
 
 export type StageRect = { left: number; top: number; width: number; height: number };
 
@@ -27,6 +28,9 @@ export type GazeProvider = {
   start(onSample: (s: RawGaze) => void): void;
   calibrate(point: { sx: number; sy: number }): Promise<void>;
   stop(): Promise<void>;
+  /** Providers with more than one estimator: ids and the switch. */
+  estimators?: () => string[];
+  setEstimator?: (id: string) => void;
 };
 
 export type ProviderInitOptions = {

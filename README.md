@@ -31,6 +31,10 @@ Then open <http://localhost:5173>. `make dev` runs the mock API (`:8000`) and th
 - **Accuracy varies by person.** Glasses, eye shape, skin tone, camera quality and above all lighting change webcam
   accuracy. A dark reading room is the worst case: light your face from the front. The validation screen shows the
   accuracy your session actually reached, and every gaze result repeats it ("Webcam gaze estimate, ±N px").
+- **Expect centimetres, not millimetres.** WebEyeTrack's own laptop-webcam evaluation reports ≈ 7 cm error after a
+  9-point calibration (its 2.3 cm figure is on phone data). Our first live sessions measured ≈ 5–7 cm. The setup
+  therefore calibrates two estimators at the same dots — WebEyeTrack's BlazeGaze network and an iris-landmark
+  regression on the same MediaPipe landmarks — and keeps whichever validates better for you.
 - **What gaze can say.** At fit zoom webcam error spans roughly 100–300 image px, several times a finding's 36 px ROI,
   so gaze supports zone-level claims; finding-level claims need small uncertainty, which mostly happens zoomed in.
   Gaze separates "never looked there" from "looked there for about N ms"; it never says what you *saw*.

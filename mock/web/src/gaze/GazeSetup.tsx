@@ -104,15 +104,19 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
   }, [step, session]);
 
   // ---- shared dot routine: show a dot, settle, collect samples for `collectMs`
-  const collectAt = async (p: Pt, settleMs: number, collectMs: number): Promise<{ samples: Pt[]; invalid: number; faceW: number[]; lum: number[] }> => {
+  const collectAt = async (p: Pt, settleMs: number, collectMs: number): Promise<{ samples: Pt[]; alt: Pt[]; altId: string | null; invalid: number; faceW: number[]; lum: number[] }> => {
     setDot(p);
     await sleep(settleMs);
-    const samples: Pt[] = [], faceW: number[] = [], lum: number[] = [];
-    let invalid = 0;
-    const off = session!.tapRaw((r) => { if (r.valid) samples.push({ sx: r.sx, sy: r.sy }); else invalid++; if (r.face) { faceW.push(r.face.w); if (r.face.lum !== undefined) lum.push(r.face.lum); } });
+    const samples: Pt[] = [], alt: Pt[] = [], faceW: number[] = [], lum: number[] = [];
+    let invalid = 0, altId: string | null = null;
+    const off = session!.tapRaw((r) => {
+      if (r.valid) samples.push({ sx: r.sx, sy: r.sy }); else invalid++;
+      if (r.alt && r.valid) { alt.push({ sx: r.alt.sx, sy: r.alt.sy }); altId = r.alt.id; }
+      if (r.face) { faceW.push(r.face.w); if (r.face.lum !== undefined) lum.push(r.face.lum); }
+    });
     await sleep(collectMs);
     off();
-    return { samples, invalid, faceW, lum };
+    return { samples, alt, altId, invalid, faceW, lum };
   };
 
   const runCalibration = async (g: GazeSession) => {
@@ -127,20 +131,33 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
     }
     setStep('validate');
     const vpts = gridPoints(gcfg.calibration.validation_points, window.innerWidth, window.innerHeight);
-    const vs: ValidationSamples = [];
+    const vs: ValidationSamples = [], vsAlt: ValidationSamples = [];
+    let altId: string | null = null;
     for (let i = 0; i < vpts.length; i++) {
       setProgress(`Validation ${i + 1} / ${vpts.length}`);
       const c = await collectAt(vpts[i]!, settleMs, dwellMs - settleMs);
       vs.push({ target: vpts[i]!, samples: c.samples, invalid: c.invalid });
+      vsAlt.push({ target: vpts[i]!, samples: c.alt, invalid: c.invalid });
+      altId = altId ?? c.altId;
     }
     setDot(null);
-    const m = validationMetrics(vs);
+    // Two estimators calibrated at the same dots? Keep the one that validated better for THIS person and session.
+    let m = validationMetrics(vs);
+    const mainId = (g.provider as unknown as { active?: string }).active ?? g.provider.id;
+    const alternatives: Record<string, { accuracy_px: number; precision_px: number }> = { [mainId]: { accuracy_px: round(m.accuracy_px), precision_px: round(m.precision_px) } };
+    let chosen = mainId;
+    if (altId && vsAlt.some((v) => v.samples.length)) {
+      const ma = validationMetrics(vsAlt);
+      alternatives[altId] = { accuracy_px: round(ma.accuracy_px), precision_px: round(ma.precision_px) };
+      if (ma.accuracy_px < m.accuracy_px && g.provider.setEstimator) { g.provider.setEstimator(altId); chosen = altId; m = ma; }
+    }
     const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[a.length >> 1]! : 0);
     const tier = qualityTier(m.accuracy_px, m.loss_pct, gcfg.quality);
     const frame = (g.provider as unknown as { frame?: { width: number; height: number } }).frame;
     g.meta = {
       ...g.meta,
       ...(frame?.width ? { camera: { width: frame.width, height: frame.height } } : {}),
+      estimator: chosen, alternatives,
       validation: { accuracy_px: round(m.accuracy_px), precision_px: round(m.precision_px), loss_pct: round(m.loss_pct), n_points: m.n_points },
       calibration: { n_points: pts.length, face_box: { w: round(median(faceW)), h: round(median(faceW) * 1.25) }, ...(lum.length ? { face_lum: round(median(lum)) } : {}) },
       quality_tier: tier, timestamp: new Date().toISOString(),
@@ -219,6 +236,11 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
               {session.meta.pipeline_latency_ms !== undefined && <tr><th style={{ color: '#aab3bd' }}>Pipeline latency</th><td>{session.meta.pipeline_latency_ms} ms</td></tr>}
             </tbody></table>
             <p className="note">Finding ROIs are ≈36 image px wide, so at fit zoom gaze supports zone-level claims; finding-level claims need σ ≤ {gcfg.resolution.lesion_sigma_max} image px, which usually means zooming in ({(metrics.accuracy_px / gcfg.resolution.lesion_sigma_max).toFixed(1)}× or more here).</p>
+            {session.meta.alternatives && Object.keys(session.meta.alternatives).length > 1 && (
+              <p className="note" data-testid="estimators">
+                <strong>Two estimators were calibrated at the same dots:</strong> {Object.entries(session.meta.alternatives).map(([id, a]) => `${id === 'blazegaze' ? 'WebEyeTrack BlazeGaze' : id === 'iris' ? 'iris-landmark regression' : id} ±${Math.round(a.accuracy_px)} px`).join(' · ')}. Using <strong>{session.meta.estimator}</strong> for this session.
+              </p>
+            )}
             <p className="note" data-testid="why">
               <strong>What limits accuracy here:</strong> your face was {Math.round(session.meta.calibration.face_box.w)} px wide in a {session.meta.camera?.width ?? '?'}×{session.meta.camera?.height ?? '?'} camera frame
               ({session.meta.camera?.width ? Math.round((100 * session.meta.calibration.face_box.w) / session.meta.camera.width) : '?'} % of the width; the gaze network wants roughly 20 % or more, so each eye has enough pixels)

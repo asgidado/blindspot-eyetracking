@@ -186,6 +186,30 @@
         }
       },
       "description": "actual camera frame size in px (face_box.w / camera.width tells how much of the frame the face fills)"
+    },
+    "estimator": {
+      "type": "string",
+      "description": "which estimator the provider emitted after validation (e.g. blazegaze, iris)"
+    },
+    "alternatives": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accuracy_px",
+          "precision_px"
+        ],
+        "properties": {
+          "accuracy_px": {
+            "type": "number"
+          },
+          "precision_px": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "validation metrics of every estimator that was calibrated at the same dots"
     }
   }
 }

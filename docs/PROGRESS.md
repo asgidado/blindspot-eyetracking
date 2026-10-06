@@ -209,3 +209,24 @@ Decisions and milestone check output. Newest at the bottom.
   few-shot adaptation to the library defaults (1 step, lr 1e-5; the affine re-fit does the work) and lengthened each
   dot (settle 800 ms so the Kalman-filtered estimate converges, 1 s of samples). Whether this moves accuracy is for the
   next human calibration; 245–266 screen px (~5 cm) may simply be this method on this laptop/lighting.
+
+## Research on the accuracy ceiling (2026-10-06, at the human's request)
+
+- **WebEyeTrack paper (arXiv:2508.19544)**: the 2.32 cm headline is within-dataset on GazeCapture (phones). The
+  cross-dataset laptop-webcam test (Eye of the Typer, 9-point dot calibration like ours) reports **7.24 cm** initially
+  and 8.72 cm after 20 min (WebGazer: 7.79 → 11.62 cm). Meta-learning uses k = 9 support samples, 5 inner SGD steps at
+  α = 1e-5; outputs are normalised to [−0.5, 0.5]² of the screen. Our measured 266–335 screen px ≈ 5.3–6.7 cm is at or
+  better than the authors' own webcam number → the ceiling is the method, not the integration.
+- Human sessions analysed from stored samples: gaze output spans the screen (not clamped), gaze–cursor correlation only
+  0.13–0.40, median gaze–cursor distance ≈ 400 image px; face 114–128 px wide in a 640 px frame (eyes ≈ 25 px).
+- GitHub issues: nothing on accuracy tuning; one issue notes the proxy does not expose `adapt()` (we use the class).
+- Literature on landmark-based gaze (MediaPipe iris + user regression, 5–9 point calibration): sub-2° reported in
+  good light; dim rooms, backlight and glasses glare degrade it. MediaPipe states iris tracking alone does not infer gaze.
+- Implemented: (1) camera at 1280×720 (doubles eye-patch pixels at the same seat); (2) a second estimator,
+  `providers/iris.ts` — ridge regression (24 features: iris/eye-corner ratios per eye, openness, head rotation and
+  translation from the face transform, nose position, face scale, cross terms; standardised, λ = 1e-2, EMA smoothing)
+  fitted from the same calibration dots and the same landmarks WebEyeTrack already computes (zero extra inference);
+  (3) validation measures both estimators (`RawGaze.alt`) and keeps the better one for the session
+  (`GazeSessionMeta.estimator`, `alternatives`), shown on the result screen; click training feeds both.
+- Checks: unit test fits a synthetic linear iris→screen mapping (±0.05 normalised); Playwright 6 passed; camera e2e now
+  reports a 1280-px frame. Real accuracy of the iris estimator awaits the human's next calibration.

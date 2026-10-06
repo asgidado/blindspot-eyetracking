@@ -4,8 +4,9 @@
 // opt-in through `trainOnClicks` and routed through handleClick().
 import type { FaceBox, GazeProvider, ProviderInitOptions, RawGaze } from '../types';
 import { boxFromLandmarks, faceLuminance, openCamera, pumpFrames, stopCamera, type Pump } from './camera';
+import { RidgeGaze, irisFeatures, type Landmark, type Mat } from './iris';
 
-type GazeResult = { facialLandmarks: { x: number; y: number }[]; eyePatch: ImageData; headVector: number[]; faceOrigin3D: number[]; gazeState: 'open' | 'closed'; normPog: number[]; durations: Record<string, number>; timestamp: number };
+type GazeResult = { facialLandmarks: Landmark[]; faceRt: Mat; eyePatch: ImageData; headVector: number[]; faceOrigin3D: number[]; gazeState: 'open' | 'closed'; normPog: number[]; durations: Record<string, number>; timestamp: number };
 
 type Wet = {
   loaded: boolean;
@@ -34,6 +35,12 @@ export class WebEyeTrackProvider implements GazeProvider {
   latencyMs = 0;
   /** actual camera frame size after constraints */
   frame = { width: 0, height: 0 };
+  /** Second estimator: iris-landmark ridge regression on the same landmarks. `active` decides which one is emitted. */
+  readonly iris = new RidgeGaze();
+  active: 'blazegaze' | 'iris' = 'blazegaze';
+  private lastFeatures: number[] | null = null;
+  estimators() { return ['blazegaze', 'iris']; }
+  setEstimator(id: string) { if (id === 'blazegaze' || id === 'iris') this.active = id; }
   /** UI frame rate as seen by the pump (median rAF gap), for logging */
   get uiFps() { return this.pump?.uiFps ?? 0; }
   lastDurations: Record<string, number> = {};
@@ -88,11 +95,22 @@ export class WebEyeTrackProvider implements GazeProvider {
       }
       const valid = hasFace && r.gazeState === 'open' && wet.loaded;
       if (valid) { this.recent.push(r); if (this.recent.length > 90) this.recent.shift(); }
-      const sx = (r.normPog[0]! + 0.5) * window.innerWidth, sy = (r.normPog[1]! + 0.5) * window.innerHeight; // library convention
-      this.onSample?.({ tClient: ts, sx, sy, valid, ...(face ? { face } : {}) });
+      const W = window.innerWidth, H = window.innerHeight;
+      const bg = { sx: (r.normPog[0]! + 0.5) * W, sy: (r.normPog[1]! + 0.5) * H }; // library convention
+      this.lastFeatures = valid ? irisFeatures(r.facialLandmarks, r.faceRt) : null;
+      const ip = this.lastFeatures ? this.iris.predict(this.lastFeatures) : null;
+      if (!valid) this.iris.resetSmoothing();
+      const ir = ip ? { sx: (ip[0] + 0.5) * W, sy: (ip[1] + 0.5) * H } : null;
+      const main = this.active === 'iris' && ir ? ir : bg;
+      const alt = this.active === 'iris' ? { id: 'blazegaze', ...bg } : ir ? { id: 'iris', ...ir } : undefined;
+      this.onSample?.({ tClient: ts, sx: main.sx, sy: main.sy, valid: valid && (this.active !== 'iris' || !!ir), ...(face ? { face } : {}), ...(alt ? { alt } : {}) });
     });
     if (this.opts?.trainOnClicks) {
-      this.clickHandler = (e: MouseEvent) => wet.handleClick(e.clientX / window.innerWidth - 0.5, e.clientY / window.innerHeight - 0.5);
+      this.clickHandler = (e: MouseEvent) => {
+        const nx = e.clientX / window.innerWidth - 0.5, ny = e.clientY / window.innerHeight - 0.5;
+        wet.handleClick(nx, ny);
+        if (this.lastFeatures) { this.iris.add(this.lastFeatures, [nx, ny]); this.iris.fit(); }
+      };
       document.addEventListener('click', this.clickHandler, true);
     }
   }
@@ -106,6 +124,8 @@ export class WebEyeTrackProvider implements GazeProvider {
     // library defaults (1 inner step, lr 1e-5): the affine re-fit over all support points does most of the work;
     // stronger fine-tuning on a handful of near-identical patches per dot overfits
     this.wet.adapt(take.map((r) => r.eyePatch), take.map((r) => r.headVector), take.map((r) => r.faceOrigin3D), take.map(() => [nx, ny]), 1, 1e-5, 'calib');
+    for (const r of take) { const f = irisFeatures(r.facialLandmarks, r.faceRt); if (f) this.iris.add(f, [nx, ny]); }
+    this.iris.fit();
     this.recent = [];
   }
 
