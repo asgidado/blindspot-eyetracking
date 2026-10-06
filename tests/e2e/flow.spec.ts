@@ -46,3 +46,34 @@ test('demo without camera records scripted gaze and the chip shows tracking', as
   for (const s of body.gaze) { expect(s).not.toHaveProperty('frame'); expect(typeof s.sigma).toBe('number'); }
   await expect(page.getByRole('heading', { name: /Reveal/ })).toBeVisible();
 });
+
+test('demo gaze reveal shows both attributions, the search replay panel, facts and debrief', async ({ page }) => {
+  await page.goto('/?study=1'); // fixed order: phantom_01 has a left-apex nodule and a right-lower consolidation
+  await page.getByTestId('demo-toggle').check();
+  await page.getByTestId('start').click();
+  await expect(page.getByText('Case 1 of')).toBeVisible();
+  await page.waitForTimeout(4000); // let the scripted scanpath run
+  await page.keyboard.press('n');
+  await expect(page.getByRole('heading', { name: /Reveal/ })).toBeVisible();
+  await expect(page.getByText(/Cursor proxy:/).first()).toBeVisible();
+  await expect(page.getByText(/Webcam gaze \(±\d+ px\):/).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Search replay' }).click();
+  await expect(page.getByRole('heading', { name: 'Zone timeline' })).toBeVisible();
+  await expect(page.locator('svg.timeline')).toBeVisible();
+  await expect(page.getByText(/retrocardiac region/).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Per-finding table' })).toBeVisible();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'What the AI sees' }).click();
+  const facts = JSON.parse((await page.getByTestId('facts-json').textContent())!);
+  expect(facts.schema).toBe('gaze_facts.v1');
+  expect(facts.phase).toBe('post_submit');
+  expect(facts.synthetic).toBe(true);
+  expect(facts.attention.sources).toContain('gaze');
+  expect(JSON.stringify(facts)).not.toMatch(/"(x|y|sx|sy)":/); // anatomy, not pixels
+  await expect(page.getByText(/bytes · ≈\d+ tokens/)).toBeVisible();
+  await page.getByRole('button', { name: 'Debrief' }).click();
+  await expect(page.getByText('Template debrief (mock)')).toBeVisible();
+  const debrief = (await page.locator('section p').first().textContent()) ?? '';
+  expect(debrief.length).toBeGreaterThan(200);
+  expect(debrief.toLowerCase()).not.toMatch(/\bsaw\b|\bnoticed\b/);
+});

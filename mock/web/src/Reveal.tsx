@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { View } from '@gaze/view';
 import { Viewer, type Overlay } from './Viewer';
 import { api, type Config, type NextCase } from './api';
-import { ReplayPanel } from './replay/ReplayPanel';
+import { ReplayPanel, type ReplayState } from './replay/ReplayPanel';
 
 type Props = { cfg: Config; kase: NextCase; result: any; onNext: () => void; last: boolean };
 
@@ -15,11 +16,41 @@ export function Reveal({ cfg, kase, result, onNext, last }: Props) {
   const gazeOn: boolean = !!result.gaze_used;
   const acc = result.attention?.gaze_accuracy_img_px_at_fit;
   const marks = [...sc.findings.filter((f: any) => f.mark).map((f: any) => f.mark), ...sc.overcalls.map((o: any) => o.mark)];
+  const [replay, setReplay] = useState<ReplayState>({ t: 0, playing: false, show: gazeOn ? 'gaze' : 'none' });
+  const heatImgs = useRef<{ gaze?: HTMLImageElement; cursor?: HTMLImageElement }>({});
+  const rp = result.replay;
+  const heatFor = (k: 'gaze' | 'cursor') => {
+    const b64 = k === 'gaze' ? rp?.heatmap_gaze_png : rp?.heatmap_cursor_png;
+    if (!b64) return undefined;
+    if (!heatImgs.current[k]) { const im = new Image(); im.src = `data:image/png;base64,${b64}`; heatImgs.current[k] = im; }
+    return heatImgs.current[k];
+  };
+  // Draw in image space: heatmap (when a heatmap tab is active) and numbered fixations up to the replay time.
+  const draw = (ctx: CanvasRenderingContext2D, v: View) => {
+    if (tab !== 'replay' || !rp) return;
+    if (replay.show !== 'none') {
+      const im = heatFor(replay.show);
+      if (im?.complete && im.naturalWidth) { ctx.save(); ctx.globalAlpha = 0.85; ctx.drawImage(im, 0, 0, kase.width, kase.height); ctx.restore(); }
+    }
+    if (replay.show !== 'gaze') return;
+    const fx = (rp.fixations as any[]).filter((f) => f.x !== null && f.t_start <= replay.t);
+    fx.forEach((f, i) => {
+      const r = Math.max(6, Math.min(60, Math.sqrt((f.t_end - f.t_start) / 1000) * 30)) / v.scale;
+      const cur = i === fx.length - 1;
+      ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = cur ? 'rgba(240,169,46,.35)' : 'rgba(240,169,46,.15)'; ctx.fill();
+      ctx.strokeStyle = '#f0a92e'; ctx.lineWidth = (cur ? 2.5 : 1.2) / v.scale; ctx.stroke();
+      if (i > 0) { const p = fx[i - 1]; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(f.x, f.y); ctx.strokeStyle = 'rgba(240,169,46,.5)'; ctx.lineWidth = 1 / v.scale; ctx.stroke(); }
+      ctx.fillStyle = '#fff'; ctx.font = `${12 / v.scale}px Atkinson Hyperlegible, system-ui`; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), f.x, f.y + 4 / v.scale);
+      // uncertainty ring (1 σ) on the current fixation
+      if (cur && f.sigma) { ctx.beginPath(); ctx.arc(f.x, f.y, f.sigma, 0, Math.PI * 2); ctx.setLineDash([4 / v.scale, 4 / v.scale]); ctx.strokeStyle = 'rgba(240,169,46,.6)'; ctx.lineWidth = 1 / v.scale; ctx.stroke(); ctx.setLineDash([]); }
+    });
+  };
   const overlays = useMemo<Overlay[]>(() => result.reveal.findings.map((f: any) => ({ points: f.polygon, color: '#35c9dd', label: `${f.finding_id} ${focal[f.label] ?? f.label}` })), [result, focal]);
 
   return (
     <main className="reveal">
-      <Viewer src={api.imageUrl(kase.id)} imgW={kase.width} imgH={kase.height} marks={marks} overlays={overlays} readonly
+      <Viewer src={api.imageUrl(kase.id)} imgW={kase.width} imgH={kase.height} marks={marks} overlays={overlays} readonly draw={draw}
         loupe={{ radius: cfg.mock.viewer.loupe.radius_px, mag: cfg.mock.viewer.loupe.mag, defaultOn: false }} zoomMax={cfg.mock.viewer.zoom_max} />
       <aside className="rail">
         <h2>Reveal <span className="muted" style={{ fontWeight: 400 }}>· case {kase.index + 1} of {kase.total}</span></h2>
@@ -64,7 +95,7 @@ export function Reveal({ cfg, kase, result, onNext, last }: Props) {
             </tbody></table>
           </section>
         )}
-        {tab === 'replay' && <ReplayPanel cfg={cfg} kase={kase} result={result} />}
+        {tab === 'replay' && <ReplayPanel cfg={cfg} kase={kase} result={result} state={replay} setState={setReplay} />}
         {tab === 'facts' && <FactsTab result={result} />}
         {tab === 'debrief' && <DebriefTab result={result} />}
         <div style={{ marginTop: 'auto', paddingTop: 12 }}>
@@ -76,9 +107,9 @@ export function Reveal({ cfg, kase, result, onNext, last }: Props) {
 }
 
 function FactsTab({ result }: { result: any }) {
-  if (!result.facts) return <div className="muted">Facts are built after analysis (G3).</div>;
+  if (!result.facts) return <div className="muted">No facts for this case.</div>;
   const json = JSON.stringify(result.facts, null, 1);
-  const bytes = new TextEncoder().encode(JSON.stringify(result.facts)).length;
+  const bytes: number = result.facts_bytes ?? new TextEncoder().encode(JSON.stringify(result.facts)).length;
   return (
     <section>
       <div className="muted">Exactly what a language model would receive for this case: <strong>{bytes} bytes · ≈{Math.round(bytes / 4)} tokens</strong>. Raw samples and telemetry never go to a model.</div>

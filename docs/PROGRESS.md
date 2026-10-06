@@ -64,3 +64,30 @@ Decisions and milestone check output. Newest at the bottom.
   - In the desktop Browser pane (camera blocked) the denied-permission path shows the plain-language message.
 - **Human checkpoint still open:** a teammate calibrates in normal room light, the validation screen shows a number, the
   camera light goes off after "Continue without gaze"/session end. Not possible from this agent (no camera access).
+
+## G3 — analysis
+
+- Decision: probabilistic dwell quantises σ to the smallest configured bin ≥ σ (never understating uncertainty) and
+  caches one Gaussian-blurred float mask per (region, bin). Resolution tier uses the time-weighted median σ of the
+  samples that touch the region (P ≥ 0.05). Miss-type confidence = 1 − σ/(2·r_eq), r_eq = √(ROI area/π).
+- Decision: gaze-leads-cursor lag minimises the mean clipped (≤ 500 px) gaze–cursor distance over lags ±2 s in 33 ms
+  steps; the median is flat for step-like paths and picked arbitrary lags in tests.
+- Decision: the zone timeline uses 250 ms bins; each bin holds the fraction of the bin the (probabilistic) gaze or the
+  cursor spent in the review area, so bars read as confidence-weighted presence.
+- Decision: `attention.gaze_accuracy_img_px_at_fit` is the median σ of samples recorded at zoom ≈ 1 (what the session
+  actually achieved at fit), falling back to accuracy/fit-scale. Finding-level ±px uses the σ at that finding.
+- Facts size: the §5.10 "under ~2 KB" target holds for the example's density (1 review area, 1 finding). With all nine
+  review areas (the schema's per-area keys are ~230 B each) a full case is ≈ 3.5–4.5 KB (≈ 1 k tokens). The "What the
+  AI sees" tab shows the exact bytes. Kept the schema as specified rather than abbreviating keys; the unit test bounds
+  the two-area fixture at < 3 KB.
+- Debrief: deterministic template, ~100 words, every sentence re-checked with `validate_claim` and dropped if it fails.
+- `uv run pytest`: 29 passed — scripted sessions: never enters ROI → search (dwell < 50 ms); ~500 ms pass → recognition
+  with time-to-first ≈ 1.5 s; ~2 s linger → decision; same path at σ = 120 px → `zone` resolution, no miss type,
+  confidence 0, apex still "visited" at zone level; edge-of-region P ≈ 0.5; I-DT min-duration; descriptive scanpath
+  (first/last zone, revisits, ≤ 15 segments); lag recovered 400–600 ms for a 500 ms cursor delay; κ and confusion;
+  facts validate against the schema, contain no pixel keys, `to_prompt_text` is deterministic, claim validator catches
+  "saw", prescriptive order, numbers not in facts, and finding-level claims at zone resolution; full API submit with
+  gaze yields both attributions (cursor search vs gaze recognition → "disagree") and a debrief with "your eyes reached".
+- Playwright 5 passed — demo-without-camera reveal shows "Cursor proxy:" and "Webcam gaze (±N px):" per miss, the zone
+  timeline SVG with hard unvisited rows highlighted, scanpath Play, heatmap toggle, the per-finding table, the exact
+  GazeFacts JSON (schema gaze_facts.v1, post_submit, synthetic, no pixel keys) with bytes/≈tokens, and the template debrief.
