@@ -1,0 +1,80 @@
+# Mirrors Blindspot as of 2026-10-06; the integrating engineer re-checks these against Blindspot's
+# config/scoring.yaml and config/review_areas.yaml. Used ONLY by the mock (mock/api) — the portable
+# packages receive these numbers as parameters.
+
+image:
+  width: 1024
+  roi_frac: 0.035                 # finding ROI = mask dilated by ρ = 0.035·W ≈ 36 px at 1024
+
+cursor_dwell:                     # Blindspot SPEC §7.1
+  max_dt_ms: 250
+  max_still_ms: 1500
+  zoom_dwell_min: 2.0
+  zoom_dwell_weight: 0.5
+
+miss_types:                       # Kundel taxonomy thresholds on dwell in the finding ROI
+  recognition_from_ms: 300        # < 300 search; 300–1000 recognition; ≥ 1000 decision
+  decision_from_ms: 1000
+
+review_areas:                     # coverage targets with difficulty hardness 0–1
+  visit_ms: 300
+  hardness:
+    right_apex: 0.8
+    left_apex: 0.8
+    right_hilum: 0.8
+    left_hilum: 0.8
+    retrocardiac: 1.0
+    right_costophrenic_angle: 0.4
+    left_costophrenic_angle: 0.5
+    subdiaphragmatic: 0.9
+    mediastinum: 0.7
+
+zones:                            # every §0 zone id with its human name. Patient RIGHT is displayed on image LEFT.
+  right_apex: right apex
+  left_apex: left apex
+  right_upper_zone: right upper zone
+  left_upper_zone: left upper zone
+  right_mid_zone: right mid zone
+  left_mid_zone: left mid zone
+  right_lower_zone: right lower zone
+  left_lower_zone: left lower zone
+  right_hilum: right hilum
+  left_hilum: left hilum
+  right_periphery: right periphery
+  left_periphery: left periphery
+  right_costophrenic_angle: right costophrenic angle
+  left_costophrenic_angle: left costophrenic angle
+  retrocardiac: retrocardiac region (behind the heart)
+  subdiaphragmatic: below the diaphragm
+  mediastinum: mediastinum
+  cardiac_silhouette: cardiac silhouette
+  right_clavicle: right clavicle
+  left_clavicle: left clavicle
+  spine: spine
+
+labels:
+  focal:
+    pneumothorax: Pneumothorax
+    effusion: Pleural effusion
+    consolidation: Consolidation
+    atelectasis: Atelectasis
+    nodule: Nodule
+    mass: Mass
+    fracture: Fracture
+    calcification: Calcification
+    pleural_thickening: Pleural thickening
+  global:
+    cardiomegaly: Cardiomegaly
+    emphysema: Emphysema
+    fibrosis: Fibrosis
+    diffuse_nodule: Diffuse nodules
+
+viewer:
+  zoom_min: 1
+  zoom_max: 6
+  loupe: { radius_px: 90, mag: 2.5, default_on: true }
+  pointer_throttle_ms: 33
+  telemetry_cap: 20000
+
+session:
+  cases_per_session: 8

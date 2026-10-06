@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gaze_sample.v1",
+  "title": "GazeSample",
+  "description": "One webcam gaze estimate, on the same clock as Blindspot's TelemetryEvent (ms since case shown).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["t", "sx", "sy", "sigma", "valid", "zoom", "vp"],
+  "properties": {
+    "t": { "type": "number", "description": "ms since case shown" },
+    "sx": { "type": "number", "description": "stage-relative screen px" },
+    "sy": { "type": "number", "description": "stage-relative screen px" },
+    "x": { "type": "number", "description": "image px; absent when off-image, on UI, or invalid" },
+    "y": { "type": "number", "description": "image px; absent when off-image, on UI, or invalid" },
+    "sigma": { "type": "number", "minimum": 0, "description": "1-sigma uncertainty in IMAGE px = session screen-px accuracy / view.scale (or / (loupe_mag*scale) on the loupe)" },
+    "valid": { "type": "boolean" },
+    "zoom": { "type": "number", "description": "1 = fit" },
+    "vp": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4, "description": "visible image rect [x0,y0,x1,y1] in image px" },
+    "on_loupe": { "type": "boolean", "description": "true when mapped through the loupe transform" },
+    "target": { "type": "string", "enum": ["image", "ui", "off"], "description": "what was under the gaze point" },
+    "face_lum": { "type": "number", "description": "mean face-region luminance 0-255 at capture, when measured" },
+    "slice": { "type": "integer", "description": "reserved for CT/MRI stacks; unused for radiographs" }
+  }
+}

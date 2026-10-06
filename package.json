@@ -1,0 +1,25 @@
+{
+  "name": "blindspot-gaze",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["packages/gaze-web", "mock/web"],
+  "scripts": {
+    "test": "vitest run",
+    "lint": "oxlint packages shared mock/web/src tests",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p mock/web/tsconfig.json --noEmit",
+    "build": "npm run build -w mock/web",
+    "dev": "npm run dev -w mock/web",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "jsdom": "^25.0.1",
+    "oxlint": "^0.15.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  }
+}

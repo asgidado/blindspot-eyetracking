@@ -1,0 +1,54 @@
+# All gaze thresholds. Loaded by the mock API (served to the web app at GET /config) and by gaze_analysis callers.
+# Nothing here is read directly by the portable packages; they receive these values as parameters.
+
+providers:
+  order: [webeyetrack, webgazer, mock]   # first that initialises wins; mock = no camera (demo/CI)
+  target_hz: 30                           # inference rate; webcams rarely exceed 30 fps
+  degraded_hz: 15                         # drop to this before letting the viewer stutter (< 50 fps)
+  train_on_clicks: true                   # providers learn from clicks (never from mouse moves); forced false in study mode
+  asset_base_url: /vendor/models          # model weights/wasm served locally; no CDN at runtime
+
+calibration:
+  points: 9                               # few-shot calibration grid (3x3)
+  validation_points: 5                    # separate validation positions (centre + 4 offsets)
+  dwell_ms: 1500                          # how long each target is shown
+  settle_ms: 500                          # discard samples while the eye moves to the target
+  face_centre_tolerance: 0.2              # fraction of frame the face centre may be off before "centre your face"
+  min_face_lum: 40                        # 0-255 mean face luminance below which we warn "Light your face"
+
+quality:                                  # tier by validation accuracy (screen px) and data loss %
+  good:   { accuracy_px_max: 50,  loss_pct_max: 10 }
+  coarse: { accuracy_px_max: 120, loss_pct_max: 30 }
+  # anything worse is "poor": gaze still recorded, analysis falls back to cursor
+
+drift:
+  recalibrate_factor: 2.0                 # drift error > factor x baseline accuracy => prompt recalibration
+  dot_ms: 1000                            # one dot for 1 s between cases
+
+head:
+  max_scale_change: 0.25                  # face-box width may change ±25 % from calibration before samples are invalid
+
+clean:
+  max_gap_ms: 500                         # gaps longer than this are flagged (not interpolated)
+  median_window: 3                        # median filter over 3 samples
+
+fixation:                                 # I-DT
+  min_dispersion_px: 40                   # screen px; threshold = max(this, dispersion_k x session precision)
+  dispersion_k: 2.0
+  min_duration_ms: 100
+
+dwell:
+  max_dt_ms: 250                          # cap on per-sample dt (same as Blindspot's cursor dwell)
+  sigma_bins_px: [10, 20, 35, 50, 75, 100, 150, 200, 300]   # σ quantisation for cached blurred masks (image px)
+
+resolution:
+  lesion_sigma_max: 72                    # ≈ 2ρ at 1024 px: miss types allowed
+  zone_sigma_max: 150                     # zone-level coverage only
+  # above zone_sigma_max => "none": gaze contributes nothing for that region
+
+agreement:
+  max_lag_ms: 2000                        # cross-correlation search window for gaze-leads-cursor lag
+  lag_step_ms: 33
+
+heatmap:
+  size: 256

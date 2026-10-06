@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gaze_facts.v1",
+  "title": "GazeFacts",
+  "description": "The only gaze-derived thing any language model receives. Anatomy, not pixels; every number has units, source and (for gaze) resolution tier; comparisons are precomputed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "phase", "attention", "search", "review_areas", "references", "claim_limits"],
+  "$defs": {
+    "source": { "type": "string", "enum": ["gaze", "cursor"] },
+    "resolution": { "type": "string", "enum": ["lesion", "zone", "none"] },
+    "miss_type": { "type": ["string", "null"], "enum": ["search", "recognition", "decision", null] },
+    "zone_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["zone", "human", "source"],
+      "properties": { "zone": { "type": "string" }, "human": { "type": "string" }, "source": { "$ref": "#/$defs/source" } }
+    }
+  },
+  "properties": {
+    "schema": { "const": "gaze_facts.v1" },
+    "phase": { "type": "string", "enum": ["pre_submit", "post_submit"] },
+    "synthetic": { "type": "boolean", "description": "true when the case or session is synthetic/scripted" },
+    "attention": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sources", "supports"],
+      "properties": {
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/source" }, "minItems": 1 },
+        "gaze_quality": { "type": "string", "enum": ["good", "coarse", "poor"] },
+        "gaze_accuracy_img_px_at_fit": { "type": "number" },
+        "supports": { "type": "string", "enum": ["lesion_level", "zone_level", "cursor_only"] }
+      }
+    },
+    "search": {
+      "type": "object", "additionalProperties": false,
+      "required": ["total_read_ms", "zone_sequence"],
+      "properties": {
+        "total_read_ms": { "type": "number" },
+        "first_mark_ms": { "type": ["number", "null"] },
+        "first_zone": { "$ref": "#/$defs/zone_ref" },
+        "last_zone_before_first_mark": { "$ref": "#/$defs/zone_ref" },
+        "last_zone_before_submit": { "$ref": "#/$defs/zone_ref" },
+        "zone_sequence": {
+          "type": "array", "maxItems": 15,
+          "items": { "type": "object", "additionalProperties": false, "required": ["zone", "enter_ms", "dwell_ms", "source"],
+            "properties": { "zone": { "type": "string" }, "human": { "type": "string" }, "enter_ms": { "type": "number" }, "dwell_ms": { "type": "number" }, "source": { "$ref": "#/$defs/source" } } }
+        },
+        "revisits": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "longest_dwell_zones": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["zone", "human", "dwell_ms", "source"], "properties": { "zone": { "type": "string" }, "human": { "type": "string" }, "dwell_ms": { "type": "number" }, "source": { "$ref": "#/$defs/source" } } } },
+        "fixation_count": { "type": "integer" },
+        "order_note": { "type": "string" }
+      }
+    },
+    "review_areas": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["zone", "human", "hardness", "cursor_dwell_ms", "visited_cursor", "visit_threshold_ms", "reference"],
+        "properties": {
+          "zone": { "type": "string" }, "human": { "type": "string" }, "hardness": { "type": "number" },
+          "gaze_dwell_ms": { "type": "number" }, "gaze_resolution": { "$ref": "#/$defs/resolution" },
+          "cursor_dwell_ms": { "type": "number" },
+          "visited_gaze": { "type": "boolean" }, "visited_cursor": { "type": "boolean" },
+          "visit_threshold_ms": { "type": "number" },
+          "reference": { "const": "review_area_checklist" }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "gaze_weighted_pct": { "type": "number" }, "cursor_weighted_pct": { "type": "number" },
+        "unvisited_hard_gaze": { "type": "array", "items": { "type": "string" } },
+        "unvisited_hard_cursor": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["finding_id", "label", "location", "outcome", "cursor", "bands_ms", "reference"],
+        "properties": {
+          "finding_id": { "type": "string" }, "label": { "type": "string" }, "location": { "type": "string" },
+          "outcome": { "type": "string", "enum": ["found", "mislabeled", "missed", "overcall"] },
+          "gaze": { "type": "object", "additionalProperties": false, "required": ["dwell_ms", "resolution", "miss_type"],
+            "properties": { "dwell_ms": { "type": "number" }, "resolution": { "$ref": "#/$defs/resolution" }, "miss_type": { "$ref": "#/$defs/miss_type" }, "miss_type_confidence": { "type": "number" }, "time_to_first_ms": { "type": ["number", "null"] }, "sigma_px": { "type": "number" } } },
+          "cursor": { "type": "object", "additionalProperties": false, "required": ["dwell_ms", "miss_type"],
+            "properties": { "dwell_ms": { "type": "number" }, "miss_type": { "$ref": "#/$defs/miss_type" } } },
+          "bands_ms": { "type": "object", "additionalProperties": false, "required": ["recognition_from", "decision_from"], "properties": { "recognition_from": { "type": "number" }, "decision_from": { "type": "number" } } },
+          "agreement": { "type": "string", "enum": ["agree", "disagree", "n/a"] },
+          "reference": { "const": "expert_annotation" }
+        }
+      }
+    },
+    "agreement": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "n_samples": { "type": "integer" },
+        "median_gaze_cursor_px": { "type": "object", "additionalProperties": { "type": ["number", "null"] } },
+        "gaze_leads_cursor_ms": { "type": ["number", "null"] },
+        "review_area_visited_agreement_pct": { "type": ["number", "null"] },
+        "review_area_kappa": { "type": ["number", "null"] }
+      }
+    },
+    "history": {
+      "type": "object", "additionalProperties": false,
+      "required": ["n_cases"],
+      "properties": {
+        "n_cases": { "type": "integer" },
+        "review_area_unvisited": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "miss_types": { "type": "object", "additionalProperties": { "type": "object", "additionalProperties": { "type": "integer" } } }
+      }
+    },
+    "references": { "type": "object", "additionalProperties": { "type": "string" } },
+    "claim_limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["never_say", "finding_level_gaze_claims_only_if", "describe_order_as"],
+      "properties": {
+        "never_say": { "type": "array", "items": { "type": "string" } },
+        "finding_level_gaze_claims_only_if": { "type": "string" },
+        "describe_order_as": { "type": "string" }
+      }
+    }
+  }
+}
