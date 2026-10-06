@@ -98,9 +98,11 @@ export class WebEyeTrackProvider implements GazeProvider {
   async calibrate(point: { sx: number; sy: number }): Promise<void> {
     if (!this.wet) return;
     const nx = point.sx / window.innerWidth - 0.5, ny = point.sy / window.innerHeight - 0.5;
-    const take = this.recent.slice(-Math.max(3, Math.round(this.hz * 0.7)));
+    const take = this.recent.slice(-Math.max(3, Math.round(this.hz * 0.8)));
     if (take.length < 3) return; // nothing usable (face lost); UI will report data loss
-    this.wet.adapt(take.map((r) => r.eyePatch), take.map((r) => r.headVector), take.map((r) => r.faceOrigin3D), take.map(() => [nx, ny]), 3, 1e-4, 'calib');
+    // library defaults (1 inner step, lr 1e-5): the affine re-fit over all support points does most of the work;
+    // stronger fine-tuning on a handful of near-identical patches per dot overfits
+    this.wet.adapt(take.map((r) => r.eyePatch), take.map((r) => r.headVector), take.map((r) => r.faceOrigin3D), take.map(() => [nx, ny]), 1, 1e-5, 'calib');
     this.recent = [];
   }
 

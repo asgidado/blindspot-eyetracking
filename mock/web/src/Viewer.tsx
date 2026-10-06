@@ -35,6 +35,12 @@ export const Viewer = forwardRef<ViewerHandle, Props>(function Viewer(p, ref) {
   const cursor = useRef<{ sx: number; sy: number } | null>(null); // stage-relative
   const drag = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
   const [, bump] = useState(0);
+  // Performance: the CSS filter is applied ONCE per setting change into an offscreen canvas; per-frame draws copy pixels.
+  const filtered = useRef<HTMLCanvasElement | null>(null);
+  const filterKey = useRef('');
+  const rafPending = useRef(false);
+  const stageRect = useRef<DOMRect | null>(null);
+  const requestRedraw = () => { if (rafPending.current) return; rafPending.current = true; requestAnimationFrame(() => { rafPending.current = false; bump((n) => n + 1); }); };
 
   useEffect(() => {
     const im = new Image();
@@ -46,10 +52,13 @@ export const Viewer = forwardRef<ViewerHandle, Props>(function Viewer(p, ref) {
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
+    const ro = new ResizeObserver(() => { stageRect.current = el.getBoundingClientRect(); setSize({ w: el.clientWidth, h: el.clientHeight }); });
     ro.observe(el);
+    stageRect.current = el.getBoundingClientRect();
     setSize({ w: el.clientWidth, h: el.clientHeight });
-    return () => ro.disconnect();
+    const onScroll = () => { stageRect.current = el.getBoundingClientRect(); };
+    window.addEventListener('scroll', onScroll, true);
+    return () => { ro.disconnect(); window.removeEventListener('scroll', onScroll, true); };
   }, []);
 
   const reset = useCallback(() => {
@@ -74,7 +83,7 @@ export const Viewer = forwardRef<ViewerHandle, Props>(function Viewer(p, ref) {
 
   useImperativeHandle(ref, () => ({
     getViewState: () => {
-      const r = stageRef.current?.getBoundingClientRect() ?? new DOMRect();
+      const r = stageRect.current ?? stageRef.current?.getBoundingClientRect() ?? new DOMRect(); // cached: no forced layout per gaze sample
       const c = cursor.current;
       const q = c ? imgPt(c.sx, c.sy) : null;
       return {
@@ -106,10 +115,19 @@ export const Viewer = forwardRef<ViewerHandle, Props>(function Viewer(p, ref) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, size.w, size.h);
     if (!img) return;
-    const filter = `brightness(${bright}) contrast(${contrast})${invert ? ' invert(1)' : ''}`;
+    const key = `${bright}|${contrast}|${invert}|${p.src}`;
+    if (filterKey.current !== key || !filtered.current) {
+      const off = filtered.current ?? document.createElement('canvas');
+      off.width = img.naturalWidth; off.height = img.naturalHeight;
+      const octx = off.getContext('2d')!;
+      octx.filter = `brightness(${bright}) contrast(${contrast})${invert ? ' invert(1)' : ''}`;
+      octx.drawImage(img, 0, 0);
+      filtered.current = off; filterKey.current = key;
+    }
+    const src = filtered.current;
     const drawImage = (v: View) => {
-      ctx.save(); ctx.filter = filter; ctx.imageSmoothingEnabled = v.scale < 1.5;
-      ctx.drawImage(img, v.originX, v.originY, p.imgW * v.scale, p.imgH * v.scale); ctx.restore();
+      ctx.save(); ctx.imageSmoothingEnabled = v.scale < 1.5;
+      ctx.drawImage(src, v.originX, v.originY, p.imgW * v.scale, p.imgH * v.scale); ctx.restore();
     };
     const drawOverlays = (v: View) => {
       ctx.save(); ctx.setTransform(dpr * v.scale, 0, 0, dpr * v.scale, dpr * v.originX, dpr * v.originY);
@@ -162,15 +180,16 @@ export const Viewer = forwardRef<ViewerHandle, Props>(function Viewer(p, ref) {
         const { sx, sy } = rel(e); cursor.current = { sx, sy };
         const d = drag.current;
         if (d && (d.moved || Math.hypot(sx - d.sx, sy - d.sy) > 4)) {
-          d.moved = true; setView((v) => ({ ...v, originX: d.ox + (sx - d.sx), originY: d.oy + (sy - d.sy) })); tele('pan', sx, sy);
-        } else { tele('move', sx, sy); bump((n) => n + 1); }
+          d.moved = true; tele('pan', sx, sy);
+          if (!rafPending.current) { rafPending.current = true; requestAnimationFrame(() => { rafPending.current = false; setView((v) => ({ ...v, originX: d.ox + (sx - d.sx), originY: d.oy + (sy - d.sy) })); }); }
+        } else { tele('move', sx, sy); if (loupeOn) requestRedraw(); }
       }}
       onPointerUp={(e) => {
         const { sx, sy } = rel(e); const d = drag.current; drag.current = null; tele('up', sx, sy);
         if (d && !d.moved && !p.readonly) { const q = imgPt(sx, sy); if (onImage(q)) p.onPlaceMark?.({ x: q.x, y: q.y, sx, sy }); }
       }}
       onPointerEnter={(e) => { const { sx, sy } = rel(e); cursor.current = { sx, sy }; tele('enter', sx, sy); }}
-      onPointerLeave={(e) => { const { sx, sy } = rel(e); cursor.current = null; drag.current = null; tele('leave', sx, sy); bump((n) => n + 1); }}
+      onPointerLeave={(e) => { const { sx, sy } = rel(e); cursor.current = null; drag.current = null; tele('leave', sx, sy); requestRedraw(); }}
       onWheel={(e) => { const { sx, sy } = rel(e); const f = fitRef.current.scale; setView((v) => zoomAt(v, Math.exp(-e.deltaY * 0.0015), sx, sy, f, f * p.zoomMax)); tele('wheel', sx, sy); }}
       onDoubleClick={() => reset()}
     >

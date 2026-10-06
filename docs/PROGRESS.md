@@ -193,3 +193,19 @@ Decisions and milestone check output. Newest at the bottom.
 - Check (headless Chromium, software GPU, fake camera — landmarker running, no face so BlazeGaze idle): viewer 50.4 fps
   while panning with gaze at 20.5 Hz; 64 samples in a 3 s read. Playwright 6 passed. Real-laptop numbers with a face
   in view will be lower for gaze Hz (the guard trades gaze rate for viewer smoothness) — ask the human.
+
+## Second live read (human, 2026-10-06): real film, gaze recorded through the read; reading room laggy
+
+- Human report: calibration not laggy; reading/marking laggy. Reveal on a real film: 5 missed findings, each with both
+  attributions; gaze σ ≈ 303 image px at the findings (≈ 245 screen px → still **poor**), so gaze stayed zone-level
+  only and cursor supplied the miss types — the honest-labelling path works. Gaze review-area dwell was recorded
+  through the whole read (retrocardiac 764 ms etc.), confirming the pipeline now survives the setup screen.
+- Lag cause: the viewer redrew the full 1024² film through a canvas brightness/contrast filter on every pointer move
+  (twice with the loupe) — expensive on its own; with the gaze pipeline sharing the thread the room stuttered.
+  Fix: the filtered film is rendered once per W/L/invert change into an offscreen canvas; per-frame draws copy pixels;
+  pointer-driven redraws and pan updates are coalesced to one per animation frame; the stage rect is cached so gaze
+  samples do not force layout.
+- Accuracy: ruled out frame mirroring (the library's own camera client draws frames unmirrored, as we do). Changed the
+  few-shot adaptation to the library defaults (1 step, lr 1e-5; the affine re-fit does the work) and lengthened each
+  dot (settle 800 ms so the Kalman-filtered estimate converges, 1 s of samples). Whether this moves accuracy is for the
+  next human calibration; 245–266 screen px (~5 cm) may simply be this method on this laptop/lighting.

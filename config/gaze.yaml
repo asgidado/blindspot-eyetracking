@@ -11,8 +11,8 @@ providers:
 calibration:
   points: 9                               # few-shot calibration grid (3x3)
   validation_points: 5                    # separate validation positions (centre + 4 offsets)
-  dwell_ms: 1500                          # how long each target is shown
-  settle_ms: 500                          # discard samples while the eye moves to the target
+  dwell_ms: 1800                          # how long each target is shown
+  settle_ms: 800                          # discard samples while the eye moves to the target and the Kalman filter converges
   face_centre_tolerance: 0.25             # fraction of frame the face centre may be off before "move into the oval" (laptop distance is fine)
   min_face_lum: 40                        # 0-255 mean face luminance below which we warn "Light your face"
 
