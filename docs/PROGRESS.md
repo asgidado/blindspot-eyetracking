@@ -132,3 +132,13 @@ Decisions and milestone check output. Newest at the bottom.
   Vite production build OK (largest chunk 2.7 MB = webeyetrack's bundled TF.js). `make lint` had one ruff nit (fixed
   here). Playwright e2e needs `npx playwright install chromium` once; it is not part of `make setup` on purpose.
 - Stretch items (fusion estimate, CT/MRI `slice` scroll recording) not started; `GazeSample.slice` is reserved in the schema.
+
+## Fix after first human try (2026-10-06, later)
+
+- Reported: the camera preview was black at the "centre your face in the oval" step. Cause: the `<video>` element was
+  rendered at different positions in the tree per step, so React remounted it and the camera stream stayed attached to
+  the discarded element. Fix: one `<video>` at a stable position, moved with CSS (`.video-wrap` / `.video-hidden`).
+- Found while fixing: React StrictMode (dev) ran the provider-start effect twice; the first run was "cancelled" but its
+  provider kept the camera and its TF.js pipeline alive (two `<video>` elements, two streams, a race that surfaced as
+  "z2 is not a function"). Fix: start exactly once (`startedRef`); if the screen really unmounts before init finishes,
+  stop that provider. The e2e now asserts exactly one video element with the stream attached, playing, inside the oval.

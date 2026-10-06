@@ -30,11 +30,15 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
   const [cardPx, setCardPx] = useState(320);
   const [log, setLog] = useState<string[]>([]);
   const addLog = (m: string) => setLog((l) => [...l.slice(-6), m]);
+  const startedRef = useRef(false); // React StrictMode runs effects twice in dev; the camera must be opened exactly once
+  const unmountedRef = useRef(false);
 
   // ---- start: demo (mock provider) or live provider selection
   useEffect(() => {
     if (drift) return;
-    let cancelled = false;
+    unmountedRef.current = false;
+    if (startedRef.current) return;
+    startedRef.current = true;
     (async () => {
       const screen = { width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio };
       const base: GazeSessionMeta = {
@@ -49,20 +53,20 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
         const provider = new MockProvider(demoScript(stageW, stageH, 60), { hz: gcfg.providers.target_hz, jitterPx: 18, seed: 7, loop: true });
         const g = new GazeSession(provider, { ...base, provider_version: provider.version, validation: { accuracy_px: 45, precision_px: 15, loss_pct: 2, n_points: 5 }, calibration: { n_points: 9, face_box: { w: 180, h: 220 }, face_lum: 128 }, quality_tier: 'coarse', train_on_clicks: false }, sessOpts, { debug });
         g.begin();
-        if (!cancelled) onDone(g);
+        onDone(g);
         return;
       }
       const video = videoRef.current!;
       const order = (gcfg.providers.order as string[]).filter((p) => p !== 'mock') as ('webeyetrack' | 'webgazer')[];
       const res = await selectProvider(order, video, { trainOnClicks: base.train_on_clicks, targetHz: gcfg.providers.target_hz, assetBaseUrl: '' }, addLog);
-      if (cancelled) return;
+      if (unmountedRef.current) { if ('provider' in res) void res.provider.stop(); return; } // left the screen: release the camera
       if ('error' in res) { setErr(res.error.message + (res.tried.length > 1 ? ` (tried ${res.tried.join(', ')})` : '')); setStep('error'); return; }
       const g = new GazeSession(res.provider, { ...base, provider: res.provider.id, provider_version: res.provider.version }, sessOpts, { debug });
       g.begin();
       setSession(g);
       setStep('camera');
     })();
-    return () => { cancelled = true; };
+    return () => { unmountedRef.current = true; };
   }, []);
 
   // ---- camera step: face position + lighting guide
@@ -140,12 +144,20 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
   const fitScale = fitView(window.innerWidth - 380, window.innerHeight - 80, 1024, 1024).scale;
 
   // ---- render
-  const videoEl = <video ref={videoRef} autoPlay playsInline muted style={step === 'camera' ? {} : { position: 'fixed', width: 2, height: 2, opacity: 0, pointerEvents: 'none' }} />;
+  // One <video> at a fixed position in the tree: React would otherwise remount it when the layout changes and the camera
+  // stream (attached in openCamera) would stay on the discarded element — a black preview.
+  const inCal = step === 'calibrate' || step === 'validate' || step === 'drift';
+  const videoBox = (
+    <div className={step === 'camera' ? 'video-wrap' : 'video-hidden'}>
+      <video ref={videoRef} autoPlay playsInline muted />
+      {step === 'camera' && <div className="guide" />}
+    </div>
+  );
 
-  if (step === 'calibrate' || step === 'validate' || step === 'drift') {
+  if (inCal) {
     return (
       <div className="cal-stage">
-        {videoEl}
+        {videoBox}
         <div style={{ position: 'absolute', top: 16, left: 0, right: 0, textAlign: 'center', color: '#c9d1d9' }}>{step === 'drift' ? 'Quick drift check — look at the dot' : `${progress} — look at the dot`}</div>
         {dot && <div className="cal-dot" style={{ left: dot.sx, top: dot.sy }} />}
       </div>
@@ -154,14 +166,14 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
 
   return (
     <div className="page">
+      {videoBox}
       <h1>Eye tracking setup</h1>
-      {step === 'starting' && <><p>Starting the webcam and loading models locally…</p><p className="note">{log.join(' · ')}</p>{videoEl}</>}
+      {step === 'starting' && <><p>Starting the webcam and loading models locally…</p><p className="note">{log.join(' · ')}</p></>}
       {step === 'error' && <><p className="warn">{err}</p><p className="note">Reading works without gaze; analysis falls back to the cursor proxy.</p>
-        <button className="primary" onClick={onSkip}>Continue without gaze</button> <button className="ghost" onClick={() => location.reload()}>Try again</button>{videoEl}</>}
+        <button className="primary" onClick={onSkip}>Continue without gaze</button> <button className="ghost" onClick={() => location.reload()}>Try again</button></>}
       {step === 'camera' && session && (
         <>
           <p>Centre your face in the oval, about arm's length away, with light in front of you (not behind). Glasses are fine but can reduce accuracy.</p>
-          <div className="video-wrap" style={{ position: 'relative' }}>{videoEl}<div className="guide" /></div>
           <p className={face.ok ? '' : 'warn'} data-testid="face-msg">{face.msg}</p>
           <p className="note">Provider: {session.provider.id} {session.provider.version} · camera frames stay in this tab and are never stored.</p>
           <button className="primary" disabled={!face.ok} onClick={() => setStep('sizing')}>Begin calibration</button> <button className="ghost" onClick={async () => { await session.end(); onSkip(); }}>Continue without gaze</button>
@@ -169,7 +181,6 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
       )}
       {step === 'sizing' && session && (
         <>
-          {videoEl}
           <p><strong>Optional:</strong> hold a credit card against the screen and drag the slider until the box matches its width. This gives a px-per-cm estimate for the report. Skip if you like.</p>
           <div style={{ width: cardPx, height: cardPx / 1.586, border: '2px solid var(--learner)', borderRadius: 8, margin: '12px 0' }} />
           <input type="range" min={150} max={700} value={cardPx} onChange={(e) => setCardPx(+e.target.value)} style={{ width: 400 }} />
@@ -181,7 +192,6 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
       )}
       {step === 'result' && session && metrics && (
         <>
-          {videoEl}
           <div className="card">
             <h3 style={{ marginTop: 0 }}>Webcam gaze estimate, ±{Math.round(metrics.accuracy_px / fitScale)} image px at fit zoom</h3>
             <table className="facts" style={{ color: 'var(--paper)' }}><tbody>

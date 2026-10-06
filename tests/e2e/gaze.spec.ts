@@ -42,6 +42,12 @@ test('live gaze path: local models load, camera step or plain-language error, co
   const outcome = page.getByTestId('face-msg').or(page.locator('.warn'));
   await expect(outcome.first()).toBeVisible({ timeout: 60_000 });
   console.log('[gaze] setup outcome:', (await outcome.first().textContent())?.slice(0, 120));
+  if (await page.getByTestId('face-msg').isVisible()) {
+    // the preview must show the live stream: one <video> element, with the camera stream attached and playing
+    const v = await page.evaluate(() => { const vs = document.querySelectorAll('video'); const v = vs[0] as HTMLVideoElement; return { n: vs.length, hasStream: !!v?.srcObject, playing: !!v && !v.paused, w: v?.videoWidth ?? 0, inWrap: !!v?.closest('.video-wrap') }; });
+    console.log('[gaze] video element:', JSON.stringify(v));
+    expect(v.n).toBe(1); expect(v.hasStream).toBe(true); expect(v.inWrap).toBe(true); expect(v.w).toBeGreaterThan(0);
+  }
   await page.getByRole('button', { name: 'Continue without gaze' }).click();
   await expect(page.getByText('Case 1 of')).toBeVisible();
   await expect(page.getByTestId('gaze-chip')).toHaveText('Gaze off');
