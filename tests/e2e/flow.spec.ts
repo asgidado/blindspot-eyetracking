@@ -14,7 +14,8 @@ async function readOneCase(page: Page, i: number) {
   await expect(page.locator('.rail li', { hasText: 'Nodule' })).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: /Reveal/ })).toBeVisible();
-  await expect(page.locator('.badge', { hasText: /^Synthetic$/ })).toBeVisible();
+  const synthetic = /Synthetic/.test((await page.getByTestId('badge').textContent()) ?? '');
+  await expect(page.locator('.badge', { hasText: /^Synthetic$/ })).toHaveCount(synthetic ? 1 : 0); // label synthetic, never real
   await expect(page.getByText(/found ·/)).toBeVisible();
   await expect(page.getByText('For education. Not for clinical use.')).toBeVisible();
 }
@@ -25,9 +26,9 @@ test('reads two phantoms without gaze and reaches the reveal each time', async (
   await page.getByTestId('name').fill('e2e');
   await page.getByTestId('start').click();
   await readOneCase(page, 0);
-  // phantom_01 (study order) has a nodule in the left apex and a consolidation: both appear in the outcome list
-  await expect(page.getByText('F1 Nodule')).toBeVisible();
-  await expect(page.getByText(/Cursor proxy:/).first()).toBeVisible();
+  // study order: first case has focal findings on both film packs (phantom_01 or ChestX-Det film_39996)
+  await expect(page.locator('.outcome').first()).toBeVisible();
+  if (await page.locator('.outcome.missed').count()) await expect(page.getByText(/Cursor proxy:/).first()).toBeVisible();
   await page.getByTestId('next').click();
   await readOneCase(page, 1);
 });
@@ -48,7 +49,7 @@ test('demo without camera records scripted gaze and the chip shows tracking', as
 });
 
 test('demo gaze reveal shows both attributions, the search replay panel, facts and debrief', async ({ page }) => {
-  await page.goto('/?study=1'); // fixed order: phantom_01 has a left-apex nodule and a right-lower consolidation
+  await page.goto('/?study=1'); // fixed order; the first case has focal findings on both film packs
   await page.getByTestId('demo-toggle').check();
   await page.getByTestId('start').click();
   await expect(page.getByText('Case 1 of')).toBeVisible();
@@ -60,14 +61,14 @@ test('demo gaze reveal shows both attributions, the search replay panel, facts a
   await page.getByRole('button', { name: 'Search replay' }).click();
   await expect(page.getByRole('heading', { name: 'Zone timeline' })).toBeVisible();
   await expect(page.locator('svg.timeline')).toBeVisible();
-  await expect(page.getByText(/retrocardiac region/).first()).toBeVisible();
+  await expect(page.getByText(/retrocardiac/).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Per-finding table' })).toBeVisible();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await page.getByRole('button', { name: 'What the AI sees' }).click();
   const facts = JSON.parse((await page.getByTestId('facts-json').textContent())!);
   expect(facts.schema).toBe('gaze_facts.v1');
   expect(facts.phase).toBe('post_submit');
-  expect(facts.synthetic).toBe(true);
+  expect(facts.synthetic).toBe(/Synthetic/.test((await page.getByTestId('badge').textContent()) ?? ''));
   expect(facts.attention.sources).toContain('gaze');
   expect(JSON.stringify(facts)).not.toMatch(/"(x|y|sx|sy)":/); // anatomy, not pixels
   await expect(page.getByText(/bytes · ≈\d+ tokens/)).toBeVisible();

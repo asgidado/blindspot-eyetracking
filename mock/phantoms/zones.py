@@ -36,7 +36,7 @@ def derive_zones(
     """Every §0 zone id -> bool mask. Rules (documented here, applied identically to phantoms and real films):
 
     - upper/mid/lower zone: each lung split into vertical thirds of its own height
-    - apex: lung above the clavicle line
+    - apex: lung above the clavicle line (fallback: top 12 % of the lung when that is empty)
     - hilum: medial band (hilum_band_frac of lung width) of the mid third
     - periphery: lateral periphery_px band of the lung
     - costophrenic angle: lateral-inferior corner (lateral cpa_frac of width x inferior cpa_frac of height)
@@ -59,7 +59,10 @@ def derive_zones(
         z[f"{side}_upper_zone"] = lung & (yy < t1)
         z[f"{side}_mid_zone"] = lung & (yy >= t1) & (yy < t2)
         z[f"{side}_lower_zone"] = lung & (yy >= t2)
-        z[f"{side}_apex"] = lung & (yy < clavicle_y)
+        apex = lung & (yy < clavicle_y)
+        if not apex.any():  # clavicle line above the lung top (segmentation quirk): use the lung's top 12 %
+            apex = lung & (yy < y0 + 0.12 * lh)
+        z[f"{side}_apex"] = apex
         medial_edge, lateral_edge = (x1, x0) if lateral_is_left else (x0, x1)
         band = lw * hilum_band_frac
         medial = (xx > medial_edge - band) if lateral_is_left else (xx < medial_edge + band)

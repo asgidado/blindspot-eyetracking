@@ -8,11 +8,18 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@lru_cache
 def gaze_cfg() -> dict:
-    return yaml.safe_load((ROOT / "config" / "gaze.yaml").read_text())
+    return _load(ROOT / "config" / "gaze.yaml")
 
 
-@lru_cache
 def mock_cfg() -> dict:
-    return yaml.safe_load((ROOT / "config" / "mock.yaml").read_text())
+    return _load(ROOT / "config" / "mock.yaml")
+
+
+def _load(p: Path) -> dict:
+    return _cached(str(p), p.stat().st_mtime_ns)
+
+
+@lru_cache(maxsize=8)
+def _cached(path: str, _mtime: int) -> dict:  # re-read when the YAML changes; no server restart needed
+    return yaml.safe_load(Path(path).read_text())

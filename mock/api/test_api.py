@@ -1,8 +1,17 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from mock.api.main import app
 
 c = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _phantoms_only(tmp_path, monkeypatch):
+    """API tests run on the committed phantoms even when the optional real-film pack is installed."""
+    from mock.api import cases
+
+    monkeypatch.setattr(cases, "FILMS", tmp_path / "no-films")
 
 
 def test_flow_phantoms_no_ground_truth_before_submit(tmp_path, monkeypatch):
@@ -190,11 +199,7 @@ def test_real_films_badge_switches_and_removal_returns_to_phantoms(tmp_path, mon
     (films / "film_1.json").write_text(json.dumps(case))
     (films / "index.json").write_text(json.dumps({"source": "chestx-det", "cases": ["film_1"]}))
     monkeypatch.setattr(cases, "FILMS", films)
-    cases.load_case.cache_clear()
-    cases.masks_for.cache_clear()
     assert c.get("/api/config").json()["badge"] == "Mock · Real films (ChestX-Det)"
     assert c.get("/api/config").json()["synthetic"] is False
     shutil.rmtree(films)
     assert c.get("/api/config").json()["badge"] == "Mock · Synthetic films"
-    cases.load_case.cache_clear()
-    cases.masks_for.cache_clear()

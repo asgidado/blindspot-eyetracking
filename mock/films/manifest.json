@@ -1,0 +1,28 @@
+{
+ "dataset": "MedOtter/ChestX-Det",
+ "split": "test",
+ "seed": 2026,
+ "rule": "\u22652 films per apex/hilum/retrocardiac/costophrenic hint, fill to 14 abnormal, + 6 normals",
+ "ids": [
+  "39996",
+  "59766",
+  "70935",
+  "61695",
+  "45529",
+  "47215",
+  "40802",
+  "70020",
+  "69889",
+  "45969",
+  "46027",
+  "41850",
+  "41518",
+  "68891",
+  "70480",
+  "56769",
+  "45595",
+  "41834",
+  "45291",
+  "40058"
+ ]
+}

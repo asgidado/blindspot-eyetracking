@@ -32,12 +32,18 @@ def case_ids() -> list[str]:
     return json.loads((source_dir() / "index.json").read_text())["cases"]
 
 
-@lru_cache(maxsize=64)
 def load_case(cid: str) -> dict:
     p = source_dir() / f"{cid}.json"
     if not p.exists():
         raise KeyError(cid)
-    return json.loads(p.read_text())
+    return _load_case(str(p), p.stat().st_mtime_ns)
+
+
+@lru_cache(maxsize=64)
+def _load_case(
+    path: str, _mtime: int
+) -> dict:  # cache keyed by file mtime so regenerated films/phantoms take effect
+    return json.loads(Path(path).read_text())
 
 
 def image_path(cid: str) -> Path:
@@ -56,9 +62,14 @@ def public_view(case: dict, index: int, total: int) -> dict:
     }
 
 
-@lru_cache(maxsize=64)
 def masks_for(cid: str) -> dict:
     """Zone masks, finding masks and finding ROIs (mask dilated by ρ = roi_frac·W)."""
+    p = source_dir() / f"{cid}.json"
+    return _masks_for(cid, p.stat().st_mtime_ns if p.exists() else 0)
+
+
+@lru_cache(maxsize=64)
+def _masks_for(cid: str, _mtime: int) -> dict:
     c = load_case(cid)
     h, w = c["height"], c["width"]
     rho = mock_cfg()["image"]["roi_frac"] * w

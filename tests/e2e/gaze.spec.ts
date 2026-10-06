@@ -33,7 +33,7 @@ test('viewer holds >= 50 fps while panning with gaze tracking on (demo provider)
 
 test('live gaze path: local models load, camera step or plain-language error, continue without gaze works', async ({ page }) => {
   const external: string[] = [];
-  page.on('request', (r) => { const u = new URL(r.url()); if (!['127.0.0.1', 'localhost'].includes(u.hostname)) external.push(r.url()); });
+  page.on('request', (r) => { const u = new URL(r.url()); if (!['127.0.0.1', 'localhost', '::1'].includes(u.hostname)) external.push(r.url()); });
   await page.goto('/');
   await page.getByTestId('gaze-toggle').check();
   await page.getByTestId('start').click();

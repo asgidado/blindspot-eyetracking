@@ -142,3 +142,23 @@ Decisions and milestone check output. Newest at the bottom.
   provider kept the camera and its TF.js pipeline alive (two `<video>` elements, two streams, a race that surfaced as
   "z2 is not a function"). Fix: start exactly once (`startedRef`); if the screen really unmounts before init finishes,
   stop that provider. The e2e now asserts exactly one video element with the stream attached, playing, inside the oval.
+
+## G1b — real films downloaded (2026-10-06, after the human asked for real radiographs)
+
+- The human asked for real chest X-rays "from the Kaggle dataset". The Kaggle listing is a repost of ChestX-Det with a
+  conflicting licence tag and the kickoff forbids Kaggle reposts, so the 20 films were fetched from the primary
+  Hugging Face release `MedOtter/ChestX-Det` after the licence/attribution line had been shown to the human. Treated the
+  explicit request for real images as the checkpoint "yes"; recorded here.
+- `make films` ran with TorchXRayVision PSPNet zones (installed in ~1 min; CPU inference ~3 s/film). 14 abnormal films
+  (2–7 focal findings each, some with global findings) + 6 normals; ids in `mock/films/manifest.json`, pixels only in
+  gitignored `data/films/`. One film's clavicle line sat above the lung top, giving empty apex zones → `derive_zones`
+  now falls back to the lung's top 12 % for the apex. Phantom outputs are unchanged by that rule.
+- Checks: 20 cases load with the "Mock · Real films (ChestX-Det)" badge; reveal overlays radiologist polygons (cyan)
+  and derived zones correctly (visual check of 4 films, patient right on image left); `mock/films/test_real_films.py`
+  (skipped when the pack is absent) passes: 20 films / 6 normals / all zones approximate / patient-side test on real
+  zones / all findings mapped to §0 labels; API tests pin themselves to phantoms; e2e made film-agnostic and labels
+  "Synthetic" only when the badge says synthetic; removing `data/films/` returns to phantoms with everything green.
+- Camera step after the first human try: the oval was too big and the "move closer" rule too strict for laptop
+  distance. Oval shrunk (96×124 in a 320×240 preview), centre tolerance 0.25, distance/lighting are now hints that
+  don't block, and the copy explains that the amber dot appears only after "Begin calibration". Config YAML is re-read
+  on change (mtime-keyed cache) so `make dev` picks up threshold edits without a restart.

@@ -69,18 +69,21 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
     return () => { unmountedRef.current = true; };
   }, []);
 
-  // ---- camera step: face position + lighting guide
+  // ---- camera step: face position guide. Blocks only on "no face" / "far off-centre"; distance and lighting are hints.
+  // Laptop use is the norm: a face at 60–80 cm is ~90–130 px wide in a 640 px frame, so do not ask people to come closer
+  // unless the face is genuinely tiny.
   useEffect(() => {
     if (step !== 'camera' || !session) return;
     const v = videoRef.current;
     return session.tapRaw((r: RawGaze) => {
       const vw = v?.videoWidth || 640, vh = v?.videoHeight || 480;
-      if (!r.face) return setFace({ ok: false, msg: 'No face detected — centre your face, arm\'s length, light in front of you.' });
+      if (!r.face) return setFace({ ok: false, msg: 'No face detected yet — face the camera from a normal laptop distance (60–80 cm) with light in front of you.' });
       const cx = (r.face.x + r.face.w / 2) / vw - 0.5, cy = (r.face.y + r.face.h / 2) / vh - 0.5, tol = gcfg.calibration.face_centre_tolerance;
-      if (Math.abs(cx) > tol || Math.abs(cy) > tol + 0.05) return setFace({ ok: false, msg: 'Centre your face in the oval.' });
-      if (r.face.lum !== undefined && r.face.lum < gcfg.calibration.min_face_lum) return setFace({ ok: false, msg: 'Light your face — turn toward a light; the dark reading room makes the camera struggle.' });
-      if (r.face.w < vw * 0.18) return setFace({ ok: false, msg: 'Move a little closer (about arm\'s length).' });
-      setFace({ ok: true, msg: 'Face found and centred. Hold still-ish during calibration; follow the amber dot.' });
+      if (Math.abs(cx) > tol || Math.abs(cy) > tol + 0.08) return setFace({ ok: false, msg: 'Face found — move so it sits roughly in the oval (you can stay at your normal distance).' });
+      const hints: string[] = [];
+      if (r.face.lum !== undefined && r.face.lum < gcfg.calibration.min_face_lum) hints.push('your face is dark — turn toward a light; the dark reading room makes the camera struggle');
+      if (r.face.w < vw * 0.10) hints.push('your face is very small in the frame — a little closer helps accuracy');
+      setFace({ ok: true, msg: hints.length ? `Face found and centred. Hint: ${hints.join('; ')}. You can still begin.` : 'Face found and centred. Click "Begin calibration": an amber dot will then appear and move around the screen — follow it with your eyes.' });
     });
   }, [step, session]);
 
@@ -173,7 +176,8 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
         <button className="primary" onClick={onSkip}>Continue without gaze</button> <button className="ghost" onClick={() => location.reload()}>Try again</button></>}
       {step === 'camera' && session && (
         <>
-          <p>Centre your face in the oval, about arm's length away, with light in front of you (not behind). Glasses are fine but can reduce accuracy.</p>
+          <p>Sit as you normally would at your laptop (about 60–80 cm) with light in front of you, not behind. Your face only needs to be roughly inside the oval — no need to lean in. Glasses are fine but can reduce accuracy.</p>
+          <p className="note">What happens next: after you click "Begin calibration", the screen goes dark and an amber dot appears at 9 positions, then 5 more for validation (about 1.5 s each). Keep your head still and follow the dot with your eyes.</p>
           <p className={face.ok ? '' : 'warn'} data-testid="face-msg">{face.msg}</p>
           <p className="note">Provider: {session.provider.id} {session.provider.version} · camera frames stay in this tab and are never stored.</p>
           <button className="primary" disabled={!face.ok} onClick={() => setStep('sizing')}>Begin calibration</button> <button className="ghost" onClick={async () => { await session.end(); onSkip(); }}>Continue without gaze</button>
