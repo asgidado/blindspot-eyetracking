@@ -40,7 +40,7 @@ films:            ## OPTIONAL: fetch 20 real ChestX-Det films into data/films/ (
 	uv sync --extra films
 	uv run python -m mock.films.fetch
 
-report:           ## reports/AGREEMENT.md from exported study sessions
+report:           ## reports/AGREEMENT.md from exported study sessions (make demo-sessions first if you have none)
 	uv run python -m gaze_analysis.report sessions/*.json
 
 e2e:
@@ -48,3 +48,6 @@ e2e:
 
 clean:
 	rm -rf node_modules .venv dist mock/web/dist
+
+demo-sessions:    ## write 4 SYNTHETIC scripted study sessions into sessions/ (for make report / recorded replay demos)
+	uv run python -m mock.api.scripted_sessions 4

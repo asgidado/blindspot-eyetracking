@@ -81,7 +81,7 @@ Decisions and milestone check output. Newest at the bottom.
   AI sees" tab shows the exact bytes. Kept the schema as specified rather than abbreviating keys; the unit test bounds
   the two-area fixture at < 3 KB.
 - Debrief: deterministic template, ~100 words, every sentence re-checked with `validate_claim` and dropped if it fails.
-- `uv run pytest`: 29 passed — scripted sessions: never enters ROI → search (dwell < 50 ms); ~500 ms pass → recognition
+- `uv run pytest`: 26 passed — scripted sessions: never enters ROI → search (dwell < 50 ms); ~500 ms pass → recognition
   with time-to-first ≈ 1.5 s; ~2 s linger → decision; same path at σ = 120 px → `zone` resolution, no miss type,
   confidence 0, apex still "visited" at zone level; edge-of-region P ≈ 0.5; I-DT min-duration; descriptive scanpath
   (first/last zone, revisits, ≤ 15 segments); lag recovered 400–600 ms for a 500 ms cursor delay; κ and confusion;
@@ -91,3 +91,17 @@ Decisions and milestone check output. Newest at the bottom.
 - Playwright 5 passed — demo-without-camera reveal shows "Cursor proxy:" and "Webcam gaze (±N px):" per miss, the zone
   timeline SVG with hard unvisited rows highlighted, scanpath Play, heatmap toggle, the per-finding table, the exact
   GazeFacts JSON (schema gaze_facts.v1, post_submit, synthetic, no pixel keys) with bytes/≈tokens, and the template debrief.
+
+## G4 — validation study + report
+
+- Study mode (`?study=1`): fixed case order (first 8 ids), `train_on_clicks` forced false, gaze + cursor on one clock,
+  drift checks (live provider), and every submit in a study session is schema-validated (GazeSessionMeta + each
+  GazeSample) before it is stored, so `sessions/<id>.json` is always a schema-clean export (also `GET /sessions/{id}/export`).
+- `make demo-sessions` writes 4 SYNTHETIC scripted study sessions through the real API path (mock provider, scripted
+  scanpaths, cursor trailing gaze by ~600 ms); `make report` → `reports/AGREEMENT.md`. The report is labelled
+  "SYNTHETIC … SCRIPTED gaze (no human eyes were tracked)" and every table carries n. A copy generated from the scripted
+  sessions is committed as an example; it is not evidence about people.
+- Check: report renders — sessions n = 4, 32 cases, per-participant table (anonymous codes), distances by cursor state
+  (idle 281 / moving 34 / loupe 38 image px), lag 508 ms recovered from the scripted ~600 ms delay, review-area visited
+  agreement 74.7 % (κ 0.339, n = 288 area-cases), miss-type confusion n = 8 at lesion resolution (κ 0.40), 21 zone-only.
+- `uv run pytest`: 27 passed (adds report rendering test).

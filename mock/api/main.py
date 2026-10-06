@@ -126,6 +126,16 @@ def submit(cid: str, body: Submit) -> dict:
         raise HTTPException(404, "unknown session or case") from e
     if body.gaze_meta:
         s["gaze_meta"] = body.gaze_meta
+    if s.get("study"):
+        from shared.schemas.loader import validate
+
+        try:
+            if s.get("gaze_meta"):
+                validate("GazeSessionMeta", s["gaze_meta"])
+            for smp in body.gaze or []:
+                validate("GazeSample", smp)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(422, f"study-mode export must be schema-valid: {e}") from e
     marks = [m.model_dump() for m in body.marks]
     result = analyse_attempt(
         case,

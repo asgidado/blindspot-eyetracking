@@ -6,6 +6,7 @@ sessions/
 *.db
 logs/
 reports/*.png
+!reports/AGREEMENT.md
 
 # secrets
 .env
