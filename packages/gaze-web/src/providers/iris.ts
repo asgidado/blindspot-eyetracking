@@ -33,7 +33,8 @@ export function irisFeatures(lm: Landmark[], rt: Mat | undefined): number[] | nu
   const nose = lm[NOSE]!;
   const scale = Math.hypot(lm[L.outer]!.x - lm[R.outer]!.x, lm[L.outer]!.y - lm[R.outer]!.y);
   const hx = (r.hx + l.hx) / 2, vy = (r.vy + l.vy) / 2;
-  return [1, hx, vy, r.hx, l.hx, r.vy, l.vy, hx * hx, vy * vy, hx * vy, r.open, l.open, yaw, pitch, r20, r21, tx, ty, tz, nose.x - 0.5, nose.y - 0.5, scale, hx * yaw, vy * pitch];
+  void r20; void r21; void tz; void scale; // kept out: near-constant during a still calibration → amplified noise after standardisation
+  return [1, hx, vy, r.hx, l.hx, r.vy, l.vy, hx * hx, vy * vy, hx * vy, yaw, pitch, tx, ty, nose.x - 0.5, nose.y - 0.5];
 }
 
 /** Ridge regression with feature standardisation; closed form via Gaussian elimination. */
@@ -44,7 +45,7 @@ export class RidgeGaze {
   private mu: number[] = [];
   private sd: number[] = [];
   private ema: [number, number] | null = null;
-  constructor(private readonly lambda = 1e-2, private readonly emaAlpha = 0.45) {}
+  constructor(private readonly lambda = 0.3, private readonly emaAlpha = 0.45) {} // strong ridge: ~135 samples at 9 dots
 
   get n() { return this.X.length; }
   get fitted() { return this.W !== null; }
@@ -56,7 +57,8 @@ export class RidgeGaze {
     const n = this.X.length, d = this.X[0]?.length ?? 0;
     if (n < Math.max(30, d + 5)) return false;
     this.mu = Array.from({ length: d }, (_, j) => (j === 0 ? 0 : this.X.reduce((a, r) => a + r[j]!, 0) / n));
-    this.sd = Array.from({ length: d }, (_, j) => (j === 0 ? 1 : Math.sqrt(this.X.reduce((a, r) => a + (r[j]! - this.mu[j]!) ** 2, 0) / n) || 1));
+    // sd floor: a feature that barely moved during calibration must not be blown up at test time
+    this.sd = Array.from({ length: d }, (_, j) => (j === 0 ? 1 : Math.max(0.02, Math.sqrt(this.X.reduce((a, r) => a + (r[j]! - this.mu[j]!) ** 2, 0) / n))));
     const Z = this.X.map((r) => this.std(r));
     const A = Array.from({ length: d }, () => new Array<number>(d).fill(0));
     const B = Array.from({ length: d }, () => [0, 0]);

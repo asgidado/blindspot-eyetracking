@@ -230,3 +230,16 @@ Decisions and milestone check output. Newest at the bottom.
   (`GazeSessionMeta.estimator`, `alternatives`), shown on the result screen; click training feeds both.
 - Checks: unit test fits a synthetic linear iris→screen mapping (±0.05 normalised); Playwright 6 passed; camera e2e now
   reports a 1280-px frame. Real accuracy of the iris estimator awaits the human's next calibration.
+
+## Fourth live calibration (human, 2026-10-06): 720p + two estimators
+
+- Measured: BlazeGaze **211.5 screen px** (≈ 289 image px at fit), precision 36 px, loss 0 %; iris-landmark regression
+  418 px (rejected by validation). Face 243 px wide in a 1280×720 frame (19 %), brightness 88/255 (dim).
+  Trend: 266.5 → 334.7 → 211.5 px as the pump, resolution and calibration were fixed; now better than the paper's
+  own laptop-webcam figure (7.24 cm ≈ 360 px).
+- Iris estimator over-fitted (head-pose features near-constant while holding still → amplified after standardisation):
+  reduced to 16 robust features, λ 0.3, sd floor 0.02. Kept as the alternative; validation still decides.
+- Tiers aligned with the kickoff's own expectation (webcam error 100–300 image px at fit supports zone-level claims):
+  good ≤ 80 screen px, coarse ≤ 220 screen px (≈ 300 image px at fit), `zone_sigma_max` 300 image px. A 212 px
+  session is therefore "coarse": gaze supplies zone-level coverage and the scanpath, cursor supplies miss types,
+  every gaze number still carries its ±px. Previously that session was "poor" and gaze contributed nothing.

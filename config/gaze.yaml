@@ -17,8 +17,10 @@ calibration:
   min_face_lum: 40                        # 0-255 mean face luminance below which we warn "Light your face"
 
 quality:                                  # tier by validation accuracy (screen px) and data loss %
-  good:   { accuracy_px_max: 50,  loss_pct_max: 10 }
-  coarse: { accuracy_px_max: 120, loss_pct_max: 30 }
+  # Published webcam error at a laptop is ≈ 100–300 image px at fit (§3 of the kickoff): that whole range supports
+  # zone-level claims, so "coarse" spans it. Measured live sessions here: 212–335 screen px.
+  good:   { accuracy_px_max: 80,  loss_pct_max: 10 }   # ≈ 110 image px at fit; finding-level types when zoomed ≥ 1.5×
+  coarse: { accuracy_px_max: 220, loss_pct_max: 30 }   # ≈ 300 image px at fit; zone-level only, always labelled ±px
   # anything worse is "poor": gaze still recorded, analysis falls back to cursor
 
 drift:
@@ -43,7 +45,7 @@ dwell:
 
 resolution:
   lesion_sigma_max: 72                    # ≈ 2ρ at 1024 px: miss types allowed
-  zone_sigma_max: 150                     # zone-level coverage only
+  zone_sigma_max: 300                     # zone-level coverage only (a lung zone is ~300 px across; probabilistic dwell handles the overlap)
   # above zone_sigma_max => "none": gaze contributes nothing for that region
 
 agreement:

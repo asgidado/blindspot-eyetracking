@@ -20,7 +20,7 @@ test('iris features respond to iris position and the ridge fits a linear screen 
   const rt = { rows: 4, columns: 4, data: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -40, 0, 0, 0, 1] };
   const f0 = irisFeatures(fakeLandmarks(0.3, 0.5), rt)!, f1 = irisFeatures(fakeLandmarks(0.7, 0.5), rt)!;
   expect(f1[1]).toBeGreaterThan(f0[1]!); // mean horizontal ratio moved right
-  const rg = new RidgeGaze(1e-3);
+  const rg = new RidgeGaze(1e-3);  // weak ridge for the exact synthetic mapping
   const pts: [number, number][] = [];
   for (let i = 0; i < 9; i++) pts.push([(i % 3) / 2 - 0.5, Math.floor(i / 3) / 2 - 0.5]);
   for (const [tx, ty] of pts) for (let k = 0; k < 8; k++) {
