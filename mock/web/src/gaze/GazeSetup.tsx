@@ -137,8 +137,10 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
     const m = validationMetrics(vs);
     const median = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[a.length >> 1]! : 0);
     const tier = qualityTier(m.accuracy_px, m.loss_pct, gcfg.quality);
+    const frame = (g.provider as unknown as { frame?: { width: number; height: number } }).frame;
     g.meta = {
       ...g.meta,
+      ...(frame?.width ? { camera: { width: frame.width, height: frame.height } } : {}),
       validation: { accuracy_px: round(m.accuracy_px), precision_px: round(m.precision_px), loss_pct: round(m.loss_pct), n_points: m.n_points },
       calibration: { n_points: pts.length, face_box: { w: round(median(faceW)), h: round(median(faceW) * 1.25) }, ...(lum.length ? { face_lum: round(median(lum)) } : {}) },
       quality_tier: tier, timestamp: new Date().toISOString(),
@@ -196,7 +198,7 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
       )}
       {step === 'sizing' && session && (
         <>
-          <p><strong>Optional:</strong> hold a credit card against the screen and drag the slider until the box matches its width. This gives a px-per-cm estimate for the report. Skip if you like.</p>
+          <p><strong>Optional screen sizing (no camera involved):</strong> hold a real credit card flat against your screen over the amber box and drag the slider until the box is exactly as wide as the card. That tells the report how many pixels make a centimetre. It does not affect calibration — skip it freely.</p>
           <div style={{ width: cardPx, height: cardPx / 1.586, border: '2px solid var(--learner)', borderRadius: 8, margin: '12px 0' }} />
           <input type="range" min={150} max={700} value={cardPx} onChange={(e) => setCardPx(+e.target.value)} style={{ width: 400 }} />
           <div style={{ marginTop: 12 }}>
@@ -217,6 +219,12 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
               {session.meta.pipeline_latency_ms !== undefined && <tr><th style={{ color: '#aab3bd' }}>Pipeline latency</th><td>{session.meta.pipeline_latency_ms} ms</td></tr>}
             </tbody></table>
             <p className="note">Finding ROIs are ≈36 image px wide, so at fit zoom gaze supports zone-level claims; finding-level claims need σ ≤ {gcfg.resolution.lesion_sigma_max} image px, which usually means zooming in ({(metrics.accuracy_px / gcfg.resolution.lesion_sigma_max).toFixed(1)}× or more here).</p>
+            <p className="note" data-testid="why">
+              <strong>What limits accuracy here:</strong> your face was {Math.round(session.meta.calibration.face_box.w)} px wide in a {session.meta.camera?.width ?? '?'}×{session.meta.camera?.height ?? '?'} camera frame
+              ({session.meta.camera?.width ? Math.round((100 * session.meta.calibration.face_box.w) / session.meta.camera.width) : '?'} % of the width; the gaze network wants roughly 20 % or more, so each eye has enough pixels)
+              {session.meta.calibration.face_lum !== undefined && `, face brightness ${Math.round(session.meta.calibration.face_lum)}/255${session.meta.calibration.face_lum < 100 ? ' (dim — light from the front helps)' : ''}`}.
+              {session.meta.quality_tier === 'poor' && ' Try: sit a little closer, face a light, remove glare on glasses, then Recalibrate.'}
+            </p>
           </div>
           <button className="primary" data-testid="cal-continue" onClick={() => onDone(session)}>Start reading</button>{' '}
           <button className="ghost" onClick={() => runCalibration(session)}>Recalibrate</button>{' '}

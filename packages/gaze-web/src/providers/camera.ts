@@ -13,8 +13,10 @@ export function explainCameraError(e: unknown): CameraError {
   return { code: 'Other', message: `Could not start eye tracking: ${(e as Error)?.message ?? String(e)}` };
 }
 
-export async function openCamera(video: HTMLVideoElement): Promise<MediaStream> {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }, audio: false });
+/** Ask for 720p: at laptop distance a face is ~120 px wide in a 640 px frame (eyes ~25 px) — too little for the gaze
+ *  network. 1280×720 roughly doubles the eye-patch detail at the same seating distance. Falls back to what the camera has. */
+export async function openCamera(video: HTMLVideoElement, width = 1280, height = 720): Promise<MediaStream> {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 30 }, facingMode: 'user' }, audio: false });
   video.srcObject = stream;
   video.muted = true; video.playsInline = true;
   await video.play();

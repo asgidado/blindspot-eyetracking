@@ -5,45 +5,187 @@
   "description": "Per-session calibration/validation quality for a webcam gaze session. No camera frames, ever.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "provider", "provider_version", "screen", "validation", "calibration", "quality_tier", "train_on_clicks", "study_mode", "timestamp"],
+  "required": [
+    "schema",
+    "provider",
+    "provider_version",
+    "screen",
+    "validation",
+    "calibration",
+    "quality_tier",
+    "train_on_clicks",
+    "study_mode",
+    "timestamp"
+  ],
   "properties": {
-    "schema": { "const": "gaze_session_meta.v1" },
-    "provider": { "type": "string", "enum": ["webeyetrack", "webgazer", "mock"] },
-    "provider_version": { "type": "string" },
+    "schema": {
+      "const": "gaze_session_meta.v1"
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "webeyetrack",
+        "webgazer",
+        "mock"
+      ]
+    },
+    "provider_version": {
+      "type": "string"
+    },
     "screen": {
-      "type": "object", "additionalProperties": false,
-      "required": ["width", "height", "dpr"],
-      "properties": { "width": { "type": "number" }, "height": { "type": "number" }, "dpr": { "type": "number" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "dpr"
+      ],
+      "properties": {
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "dpr": {
+          "type": "number"
+        }
+      }
     },
     "validation": {
-      "type": "object", "additionalProperties": false,
-      "required": ["accuracy_px", "precision_px", "loss_pct", "n_points"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accuracy_px",
+        "precision_px",
+        "loss_pct",
+        "n_points"
+      ],
       "properties": {
-        "accuracy_px": { "type": "number", "minimum": 0, "description": "mean screen-px error over validation targets" },
-        "precision_px": { "type": "number", "minimum": 0, "description": "RMS sample-to-sample distance while fixating targets" },
-        "loss_pct": { "type": "number", "minimum": 0, "maximum": 100 },
-        "n_points": { "type": "integer", "minimum": 0 }
+        "accuracy_px": {
+          "type": "number",
+          "minimum": 0,
+          "description": "mean screen-px error over validation targets"
+        },
+        "precision_px": {
+          "type": "number",
+          "minimum": 0,
+          "description": "RMS sample-to-sample distance while fixating targets"
+        },
+        "loss_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "n_points": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "calibration": {
-      "type": "object", "additionalProperties": false,
-      "required": ["n_points", "face_box"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n_points",
+        "face_box"
+      ],
       "properties": {
-        "n_points": { "type": "integer", "minimum": 0 },
-        "face_box": { "type": "object", "additionalProperties": false, "required": ["w", "h"], "properties": { "w": { "type": "number" }, "h": { "type": "number" } } },
-        "face_lum": { "type": "number", "description": "mean face luminance 0-255 at calibration" }
+        "n_points": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "face_box": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "w",
+            "h"
+          ],
+          "properties": {
+            "w": {
+              "type": "number"
+            },
+            "h": {
+              "type": "number"
+            }
+          }
+        },
+        "face_lum": {
+          "type": "number",
+          "description": "mean face luminance 0-255 at calibration"
+        }
       }
     },
-    "quality_tier": { "type": "string", "enum": ["good", "coarse", "poor"] },
-    "px_per_cm": { "type": "number", "description": "from the optional credit-card sizing step" },
-    "pipeline_latency_ms": { "type": "number", "description": "measured frame-capture to inference-end latency" },
-    "inference_hz": { "type": "number", "description": "achieved inference rate" },
-    "train_on_clicks": { "type": "boolean" },
-    "study_mode": { "type": "boolean" },
+    "quality_tier": {
+      "type": "string",
+      "enum": [
+        "good",
+        "coarse",
+        "poor"
+      ]
+    },
+    "px_per_cm": {
+      "type": "number",
+      "description": "from the optional credit-card sizing step"
+    },
+    "pipeline_latency_ms": {
+      "type": "number",
+      "description": "measured frame-capture to inference-end latency"
+    },
+    "inference_hz": {
+      "type": "number",
+      "description": "achieved inference rate"
+    },
+    "train_on_clicks": {
+      "type": "boolean"
+    },
+    "study_mode": {
+      "type": "boolean"
+    },
     "drift_checks": {
       "type": "array",
-      "items": { "type": "object", "additionalProperties": false, "required": ["case_index", "error_px", "recalibrated"], "properties": { "case_index": { "type": "integer" }, "error_px": { "type": "number" }, "recalibrated": { "type": "boolean" } } }
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case_index",
+          "error_px",
+          "recalibrated"
+        ],
+        "properties": {
+          "case_index": {
+            "type": "integer"
+          },
+          "error_px": {
+            "type": "number"
+          },
+          "recalibrated": {
+            "type": "boolean"
+          }
+        }
+      }
     },
-    "timestamp": { "type": "string", "format": "date-time" }
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height"
+      ],
+      "properties": {
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      },
+      "description": "actual camera frame size in px (face_box.w / camera.width tells how much of the frame the face fills)"
+    }
   }
 }

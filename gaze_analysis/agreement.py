@@ -84,8 +84,19 @@ def gaze_cursor_agreement(
         m = float(np.mean(np.minimum(dd, 500.0)))
         if best is None or m < best:
             best, best_lag, best_med = m, float(lag), float(np.median(dd))
-    out["gaze_leads_cursor_ms"] = best_lag
-    out["median_px_at_best_lag"] = best_med
+    # report a lag only when shifting clearly helps (≥ 10 % lower objective than lag 0); otherwise the series are too
+    # weakly related for the number to mean anything
+    qx0, qy0, qok0 = _interp(gt, ct, cx, cy)
+    base = float(np.mean(np.minimum(np.hypot(gx - qx0, gy - qy0)[qok0], 500.0))) if qok0.sum() >= 5 else None
+    meaningful = best is not None and base is not None and best < 0.9 * base
+    out["gaze_leads_cursor_ms"] = best_lag if meaningful else None
+    out["median_px_at_best_lag"] = best_med if meaningful else None
+    out["lag_note"] = (
+        None
+        if meaningful
+        else "lag not reported: shifting the cursor in time does not reduce the gaze–cursor distance"
+    )
+
     return out
 
 

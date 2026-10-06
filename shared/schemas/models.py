@@ -35,7 +35,7 @@ class GazeSample(_Strict):
 class Screen(_Strict):
     width: float
     height: float
-    dpr: float
+    dpr: float | None = None
 
 
 class Validation(_Strict):
@@ -69,6 +69,7 @@ class GazeSessionMeta(_Strict):
     screen: Screen
     validation: Validation
     calibration: Calibration
+    camera: Screen | None = None
     quality_tier: QualityTier
     px_per_cm: float | None = None
     pipeline_latency_ms: float | None = None

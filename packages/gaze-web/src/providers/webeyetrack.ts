@@ -32,6 +32,8 @@ export class WebEyeTrackProvider implements GazeProvider {
   private clickHandler: ((e: MouseEvent) => void) | null = null;
   /** measured pipeline latency (frame capture → result), ms, EMA */
   latencyMs = 0;
+  /** actual camera frame size after constraints */
+  frame = { width: 0, height: 0 };
   /** UI frame rate as seen by the pump (median rAF gap), for logging */
   get uiFps() { return this.pump?.uiFps ?? 0; }
   lastDurations: Record<string, number> = {};
@@ -56,7 +58,8 @@ export class WebEyeTrackProvider implements GazeProvider {
     await wet.initialize(); // loads BlazeGaze from <origin>/web/model.json (served from vendor/models/web)
     this.wet = wet;
     this.stream = await openCamera(video);
-    this.frameCanvas.width = video.videoWidth || 640; this.frameCanvas.height = video.videoHeight || 480;
+    this.frame = { width: video.videoWidth || 640, height: video.videoHeight || 480 };
+    this.frameCanvas.width = this.frame.width; this.frameCanvas.height = this.frame.height;
     this.smallCanvas.width = 64; this.smallCanvas.height = 48;
   }
 
@@ -68,7 +71,7 @@ export class WebEyeTrackProvider implements GazeProvider {
     const sctx = this.smallCanvas.getContext('2d', { willReadFrequently: true })!;
     this.pump = pumpFrames(video, { targetHz: this.opts?.targetHz ?? 20, minHz: this.opts?.minHz ?? 8 }, async (ts) => {
       if (video.videoWidth === 0) return;
-      if (this.frameCanvas.width !== video.videoWidth) { this.frameCanvas.width = video.videoWidth; this.frameCanvas.height = video.videoHeight; }
+      if (this.frameCanvas.width !== video.videoWidth) { this.frameCanvas.width = video.videoWidth; this.frameCanvas.height = video.videoHeight; this.frame = { width: video.videoWidth, height: video.videoHeight }; }
       ctx.drawImage(video, 0, 0);
       const frame = ctx.getImageData(0, 0, this.frameCanvas.width, this.frameCanvas.height);
       const r = await wet.step(frame, ts);
