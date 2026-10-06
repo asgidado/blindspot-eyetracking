@@ -47,9 +47,41 @@ test('live gaze path: local models load, camera step or plain-language error, co
     const v = await page.evaluate(() => { const vs = document.querySelectorAll('video'); const v = vs[0] as HTMLVideoElement; return { n: vs.length, hasStream: !!v?.srcObject, playing: !!v && !v.paused, w: v?.videoWidth ?? 0, inWrap: !!v?.closest('.video-wrap') }; });
     console.log('[gaze] video element:', JSON.stringify(v));
     expect(v.n).toBe(1); expect(v.hasStream).toBe(true); expect(v.inWrap).toBe(true); expect(v.w).toBeGreaterThan(0);
+    await page.waitForTimeout(3000);
+    const hz = await page.evaluate(() => (window as unknown as { __gazeSession: { inferenceHz: number } }).__gazeSession.inferenceHz);
+    console.log(`[gaze] pipeline rate at the camera step: ${hz.toFixed(1)} Hz`);
+    expect(hz).toBeGreaterThanOrEqual(8); // was 3.5 Hz with the throttled rVFC pump
   }
   await page.getByRole('button', { name: 'Continue without gaze' }).click();
   await expect(page.getByText('Case 1 of')).toBeVisible();
   await expect(page.getByTestId('gaze-chip')).toHaveText('Gaze off');
   expect(external, 'no CDN/network fetches during gaze init').toEqual([]);
+});
+
+
+test('live pipeline keeps running through calibration and a read (dev mode, fake camera)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/?gazedev=1');
+  await page.getByTestId('gaze-toggle').check();
+  await page.getByTestId('start').click();
+  const outcome = page.getByTestId('face-msg').or(page.locator('.warn'));
+  await expect(outcome.first()).toBeVisible({ timeout: 60_000 });
+  test.skip(!(await page.getByTestId('face-msg').isVisible()), 'provider could not start in this environment');
+  await page.getByRole('button', { name: 'Begin calibration' }).click();
+  await page.getByRole('button', { name: /Skip sizing/ }).click();
+  await expect(page.getByTestId('cal-continue')).toBeVisible({ timeout: 60_000 }); // 14 dots × 0.4 s in dev mode
+  const meta = await page.evaluate(() => (window as unknown as { __gazeSession: { meta: unknown } }).__gazeSession.meta);
+  console.log('[gaze] validation (fake camera, no face):', JSON.stringify((meta as { validation: unknown }).validation));
+  await page.getByTestId('cal-continue').click();
+  await expect(page.getByText('Case 1 of')).toBeVisible();
+  await page.waitForTimeout(3000);
+  const n = await page.evaluate(() => document.querySelectorAll('video').length);
+  expect(n).toBe(1); // the session-long element survived the setup screen unmounting
+  const [req] = await Promise.all([page.waitForRequest((r) => r.url().includes('/submit')), page.keyboard.press('n')]);
+  const body = req.postDataJSON();
+  console.log(`[gaze] samples recorded during a 3 s read: ${body.gaze.length} (meta hz ${body.gaze_meta.inference_hz})`);
+  expect(body.gaze.length).toBeGreaterThan(20); // was 1 before the fix
+  await expect(page.getByRole('heading', { name: /Reveal/ })).toBeVisible();
+  await page.getByTestId('next').click();
+  await expect(page.getByText('Case 2 of').or(page.getByText(/drift check/i))).toBeVisible({ timeout: 15_000 });
 });

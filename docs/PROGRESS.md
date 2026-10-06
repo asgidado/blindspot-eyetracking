@@ -162,3 +162,21 @@ Decisions and milestone check output. Newest at the bottom.
   distance. Oval shrunk (96×124 in a 320×240 preview), centre tolerance 0.25, distance/lighting are now hints that
   don't block, and the copy explains that the amber dot appears only after "Begin calibration". Config YAML is re-read
   on change (mtime-keyed cache) so `make dev` picks up threshold edits without a restart.
+
+## G2 human checkpoint — first live calibration (2026-10-06 22:29 UTC, MacBook, normal room light)
+
+- Measured: accuracy **266.5 screen px** (≈ 364 image px at fit), precision 58.9 px RMS, data loss 0 %, 9 + 5 points,
+  face box 128 px wide at ~laptop distance, face luminance 88 → tier **poor** (gaze recorded, feedback fell back to the
+  cursor proxy). Camera light went off after "Continue without gaze" (per the human). Provider webeyetrack 0.0.2.
+- Diagnosis from the session metadata: `inference_hz = 3.5` with `pipeline_latency_ms = 40`. The model was fast; the
+  frame pump was starved. Chrome throttles `requestVideoFrameCallback` for tiny/transparent/detached video elements,
+  which is how the preview was hidden during calibration — so each calibration dot got 2–3 samples. After calibration
+  the setup screen unmounted and removed the `<video>` element entirely: the read recorded **1** gaze sample.
+- Fixes: (1) the pump is a requestAnimationFrame loop that grabs a frame whenever `video.currentTime` advanced (works
+  for hidden/detached elements; rVFC only refines the capture timestamp); (2) the camera element is created
+  imperatively, lives on `<body>` for the whole session (moved into the preview box only on the camera step) and is
+  removed in `GazeSession.end()`; (3) `?gazedev=1` shortens dots and lifts the face gate so the live pipeline can be
+  exercised with a fake camera in e2e.
+- Checks (headless Chromium, fake camera): pipeline 20.5 Hz at the camera step (≥ 8 asserted), 61 samples in a 3 s read
+  (> 20 asserted; was 1), exactly one `<video>` across setup → read, drift/next-case flow continues. Playwright 6 passed.
+- **Open:** the human recalibrates with the new pump; record the new accuracy here. 266.5 px stands as the pre-fix number.

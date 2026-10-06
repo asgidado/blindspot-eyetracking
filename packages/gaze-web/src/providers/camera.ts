@@ -44,24 +44,33 @@ export function boxFromLandmarks(lm: { x: number; y: number }[], vw: number, vh:
   return { x: x0 * vw, y: y0 * vh, w: (x1 - x0) * vw, h: (y1 - y0) * vh };
 }
 
-/** Frame pump using requestVideoFrameCallback (capture-time stamps) with a rAF fallback; rate-limited to `hz`. */
+/**
+ * Frame pump. Grabs frames on a requestAnimationFrame loop whenever `video.currentTime` has advanced, rate-limited to
+ * `hz()`. Chrome throttles requestVideoFrameCallback (and sometimes decoding) for video elements that are tiny, hidden
+ * or detached — the hidden-preview case during calibration and reading — which starved the pipeline (3.5 Hz measured).
+ * drawImage() still sees fresh camera frames, so the rAF loop is the source of frames; rVFC, when available, only
+ * supplies a more precise capture timestamp (§4.4.3) for the frame we are about to process.
+ */
 export function pumpFrames(video: HTMLVideoElement, hz: () => number, onFrame: (ts: number) => Promise<void> | void): () => void {
-  let stopped = false, last = 0, busy = false;
-  const v = video as HTMLVideoElement & { requestVideoFrameCallback?: (cb: (now: number, meta: { captureTime?: number; presentationTime?: number; expectedDisplayTime?: number }) => void) => number };
-  const tick = async (now: number, meta?: { captureTime?: number; presentationTime?: number }) => {
+  let stopped = false, last = 0, busy = false, lastMediaTime = -1;
+  let capture: { ts: number; at: number } | null = null;
+  const v = video as HTMLVideoElement & { requestVideoFrameCallback?: (cb: (now: number, meta: { captureTime?: number; presentationTime?: number; mediaTime: number }) => void) => number };
+  const rvfc = () => {
+    if (stopped || !v.requestVideoFrameCallback) return;
+    v.requestVideoFrameCallback((now, meta) => { capture = { ts: meta.captureTime ?? meta.presentationTime ?? now, at: performance.now() }; rvfc(); });
+  };
+  rvfc();
+  const loop = async () => {
     if (stopped) return;
-    const ts = meta?.captureTime ?? meta?.presentationTime ?? now; // §4.4.3: stamp at capture, not inference end
-    if (!busy && ts - last >= 1000 / hz() - 2) {
-      busy = true; last = ts;
+    const now = performance.now();
+    if (!busy && video.readyState >= 2 && video.currentTime !== lastMediaTime && now - last >= 1000 / hz() - 2) {
+      lastMediaTime = video.currentTime; last = now; busy = true;
+      // capture-time stamp when rVFC gave us one for a frame presented in the last 60 ms, else "now" (≤ 1 frame late)
+      const ts = capture && now - capture.at < 60 ? capture.ts : now;
       try { await onFrame(ts); } finally { busy = false; }
     }
-    schedule();
+    requestAnimationFrame(() => void loop());
   };
-  const schedule = () => {
-    if (stopped) return;
-    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback((now, meta) => void tick(now, meta));
-    else requestAnimationFrame((now) => void tick(now));
-  };
-  schedule();
+  requestAnimationFrame(() => void loop());
   return () => { stopped = true; };
 }

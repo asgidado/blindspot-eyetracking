@@ -18,6 +18,9 @@ export class GazeSession {
   private rateWindow: number[] = [];
   inferenceHz = 0;
 
+  /** The camera <video> element. Owned here (not by React) so it survives screen changes; removed in end(). */
+  videoEl: HTMLVideoElement | null = null;
+
   constructor(
     public readonly provider: GazeProvider,
     public meta: GazeSessionMeta,
@@ -26,6 +29,8 @@ export class GazeSession {
   ) { this.debug = !!opts.debug; }
 
   onChange(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
+  /** Exposed for debugging and e2e checks (sample rate, status). Never used by the app itself. */
+  expose() { (window as unknown as { __gazeSession?: GazeSession }).__gazeSession = this; return this; }
   private emit() { for (const l of this.listeners) l(); }
 
   /** Tap the raw sample stream (calibration, validation, drift check). */
@@ -79,6 +84,19 @@ export class GazeSession {
 
   get lastPoint() { return this.lastRaw; }
 
-  /** Releases the camera. */
-  async end() { await this.provider.stop(); this.status = 'off'; this.emit(); }
+  /** Releases the camera and removes the video element. */
+  async end() { await this.provider.stop(); this.videoEl?.remove(); this.videoEl = null; this.status = 'off'; this.emit(); }
+}
+
+/** Create the session-long camera element, parked invisibly on <body>. GazeSetup moves it into the preview box. */
+export function createGazeVideo(): HTMLVideoElement {
+  const v = document.createElement('video');
+  v.autoplay = true; v.playsInline = true; v.muted = true; v.className = 'gaze-video';
+  parkGazeVideo(v);
+  return v;
+}
+
+export function parkGazeVideo(v: HTMLVideoElement) {
+  v.classList.add('parked');
+  document.body.appendChild(v);
 }

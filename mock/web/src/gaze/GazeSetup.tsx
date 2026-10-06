@@ -8,7 +8,7 @@ import { fitView } from '@gaze/view';
 import type { GazeSessionMeta, RawGaze } from '@gaze/types';
 import type { Config } from '../api';
 import type { LandingChoice } from '../Landing';
-import { GazeSession } from './session';
+import { GazeSession, createGazeVideo, parkGazeVideo } from './session';
 import { demoScript } from './demoScript';
 
 type Props = { cfg: Config; choice: LandingChoice; onDone: (g: GazeSession) => void; onSkip: () => void; drift?: GazeSession };
@@ -18,7 +18,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
   const gcfg = cfg.gaze;
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(drift?.videoEl ?? null); // session-long element, not React-managed
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // `?gazedev=1`: short dots and no face gate, so the live pipeline can be exercised with a fake camera (e2e / dev only)
+  const dev = new URLSearchParams(location.search).has('gazedev');
+  const dwellMs = dev ? 400 : gcfg.calibration.dwell_ms, settleMs = dev ? 150 : gcfg.calibration.settle_ms;
   const [step, setStep] = useState<Step>(drift ? 'drift' : 'starting');
   const [err, setErr] = useState<string | null>(null);
   const [session, setSession] = useState<GazeSession | null>(drift ?? null);
@@ -52,22 +56,33 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
         const stageW = window.innerWidth - 380, stageH = window.innerHeight - 80;
         const provider = new MockProvider(demoScript(stageW, stageH, 60), { hz: gcfg.providers.target_hz, jitterPx: 18, seed: 7, loop: true });
         const g = new GazeSession(provider, { ...base, provider_version: provider.version, validation: { accuracy_px: 45, precision_px: 15, loss_pct: 2, n_points: 5 }, calibration: { n_points: 9, face_box: { w: 180, h: 220 }, face_lum: 128 }, quality_tier: 'coarse', train_on_clicks: false }, sessOpts, { debug });
-        g.begin();
+        g.expose().begin();
         onDone(g);
         return;
       }
-      const video = videoRef.current!;
+      const video = videoRef.current ?? createGazeVideo();
+      videoRef.current = video;
       const order = (gcfg.providers.order as string[]).filter((p) => p !== 'mock') as ('webeyetrack' | 'webgazer')[];
       const res = await selectProvider(order, video, { trainOnClicks: base.train_on_clicks, targetHz: gcfg.providers.target_hz, assetBaseUrl: '' }, addLog);
       if (unmountedRef.current) { if ('provider' in res) void res.provider.stop(); return; } // left the screen: release the camera
       if ('error' in res) { setErr(res.error.message + (res.tried.length > 1 ? ` (tried ${res.tried.join(', ')})` : '')); setStep('error'); return; }
-      const g = new GazeSession(res.provider, { ...base, provider: res.provider.id, provider_version: res.provider.version }, sessOpts, { debug });
+      const g = new GazeSession(res.provider, { ...base, provider: res.provider.id, provider_version: res.provider.version }, sessOpts, { debug }).expose();
+      g.videoEl = video;
       g.begin();
       setSession(g);
       setStep('camera');
     })();
     return () => { unmountedRef.current = true; };
   }, []);
+
+  // ---- the camera element is shown inside the preview box only on the camera step; otherwise parked on <body>
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (step === 'camera' && wrapRef.current) { v.classList.remove('parked'); wrapRef.current.appendChild(v); }
+    else parkGazeVideo(v);
+    return () => { parkGazeVideo(v); };
+  }, [step, session]);
 
   // ---- camera step: face position guide. Blocks only on "no face" / "far off-centre"; distance and lighting are hints.
   // Laptop use is the norm: a face at 60–80 cm is ~90–130 px wide in a 640 px frame, so do not ask people to come closer
@@ -105,7 +120,7 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
     const faceW: number[] = [], lum: number[] = [];
     for (let i = 0; i < pts.length; i++) {
       setProgress(`Calibration ${i + 1} / ${pts.length}`);
-      const c = await collectAt(pts[i]!, gcfg.calibration.settle_ms, gcfg.calibration.dwell_ms - gcfg.calibration.settle_ms);
+      const c = await collectAt(pts[i]!, settleMs, dwellMs - settleMs);
       faceW.push(...c.faceW); lum.push(...c.lum);
       await g.provider.calibrate(pts[i]!);
     }
@@ -114,7 +129,7 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
     const vs: ValidationSamples = [];
     for (let i = 0; i < vpts.length; i++) {
       setProgress(`Validation ${i + 1} / ${vpts.length}`);
-      const c = await collectAt(vpts[i]!, gcfg.calibration.settle_ms, gcfg.calibration.dwell_ms - gcfg.calibration.settle_ms);
+      const c = await collectAt(vpts[i]!, settleMs, dwellMs - settleMs);
       vs.push({ target: vpts[i]!, samples: c.samples, invalid: c.invalid });
     }
     setDot(null);
@@ -147,15 +162,10 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
   const fitScale = fitView(window.innerWidth - 380, window.innerHeight - 80, 1024, 1024).scale;
 
   // ---- render
-  // One <video> at a fixed position in the tree: React would otherwise remount it when the layout changes and the camera
-  // stream (attached in openCamera) would stay on the discarded element — a black preview.
+  // The <video> is created imperatively and lives on <body> for the whole session (see createGazeVideo); React never
+  // remounts it, and it survives this screen unmounting so the pipeline keeps running while reading.
   const inCal = step === 'calibrate' || step === 'validate' || step === 'drift';
-  const videoBox = (
-    <div className={step === 'camera' ? 'video-wrap' : 'video-hidden'}>
-      <video ref={videoRef} autoPlay playsInline muted />
-      {step === 'camera' && <div className="guide" />}
-    </div>
-  );
+  const videoBox = step === 'camera' ? <div className="video-wrap" ref={wrapRef}><div className="guide" /></div> : null;
 
   if (inCal) {
     return (
@@ -180,7 +190,7 @@ export function GazeSetup({ cfg, choice, onDone, onSkip, drift }: Props) {
           <p className="note">What happens next: after you click "Begin calibration", the screen goes dark and an amber dot appears at 9 positions, then 5 more for validation (about 1.5 s each). Keep your head still and follow the dot with your eyes.</p>
           <p className={face.ok ? '' : 'warn'} data-testid="face-msg">{face.msg}</p>
           <p className="note">Provider: {session.provider.id} {session.provider.version} · camera frames stay in this tab and are never stored.</p>
-          <button className="primary" disabled={!face.ok} onClick={() => setStep('sizing')}>Begin calibration</button> <button className="ghost" onClick={async () => { await session.end(); onSkip(); }}>Continue without gaze</button>
+          <button className="primary" disabled={!face.ok && !dev} onClick={() => setStep('sizing')}>Begin calibration</button> <button className="ghost" onClick={async () => { await session.end(); onSkip(); }}>Continue without gaze</button>
         </>
       )}
       {step === 'sizing' && session && (
