@@ -1,0 +1,42 @@
+# data & sessions (never commit images, masks, annotations, session exports)
+data/
+sessions/
+*.sqlite
+*.sqlite3
+*.db
+logs/
+reports/*.png
+
+# secrets
+.env
+.env.*
+
+# node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# downloaded model weights / vendored runtime assets
+vendor/models/
+*.onnx
+*.tflite
+*.bin
+*.pt
+*.pth
+*.safetensors
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
