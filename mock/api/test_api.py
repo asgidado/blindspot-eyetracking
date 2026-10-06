@@ -172,3 +172,29 @@ def test_submit_with_gaze_yields_facts_and_both_attributions(tmp_path, monkeypat
         summ["miss_types"]["gaze"] == {"recognition": 1, "search": 1}
         and summ["miss_type_confusion"]["n"] == 2
     )
+
+
+def test_real_films_badge_switches_and_removal_returns_to_phantoms(tmp_path, monkeypatch):
+    import json
+    import shutil
+
+    from mock.api import cases
+
+    films = tmp_path / "films"
+    films.mkdir()
+    shutil.copy("mock/phantoms/cases/phantom_01.png", films / "film_1.png")
+    case = json.loads(open("mock/phantoms/cases/phantom_01.json").read()) | {
+        "id": "film_1",
+        "source": "chestx-det",
+    }
+    (films / "film_1.json").write_text(json.dumps(case))
+    (films / "index.json").write_text(json.dumps({"source": "chestx-det", "cases": ["film_1"]}))
+    monkeypatch.setattr(cases, "FILMS", films)
+    cases.load_case.cache_clear()
+    cases.masks_for.cache_clear()
+    assert c.get("/api/config").json()["badge"] == "Mock · Real films (ChestX-Det)"
+    assert c.get("/api/config").json()["synthetic"] is False
+    shutil.rmtree(films)
+    assert c.get("/api/config").json()["badge"] == "Mock · Synthetic films"
+    cases.load_case.cache_clear()
+    cases.masks_for.cache_clear()

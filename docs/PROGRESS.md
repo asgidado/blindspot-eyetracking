@@ -105,3 +105,21 @@ Decisions and milestone check output. Newest at the bottom.
   (idle 281 / moving 34 / loupe 38 image px), lag 508 ms recovered from the scripted ~600 ms delay, review-area visited
   agreement 74.7 % (κ 0.339, n = 288 area-cases), miss-type confusion n = 8 at lesion resolution (κ 0.40), 21 zone-only.
 - `uv run pytest`: 27 passed (adds report rendering test).
+
+## G1b — real films (code ready; download awaits the human checkpoint)
+
+- Dataset layout inspected (metadata only, nothing downloaded): `MedOtter/ChestX-Det` ships 9 parquet shards
+  (110–176 MB each), so per-file download of 20 images from the repo is impossible. The Hugging Face datasets-server
+  `rows` API exposes each row's cached image URL plus `annotation_json` (`syms`, `boxes`, per-instance `polygons`),
+  `is_negative`, 1024×1024. `make films` pages the `test` split (553 rows) for metadata, picks 20 by the seeded rule, and
+  downloads exactly those 20 PNGs. No credentials.
+- Licence line (dataset card): Apache-2.0 annotations over NIH ChestX-ray14 images, attribution required
+  (NIH box link, Wang et al. 2017, NIH Clinical Center as provider; cite ChestX-Det arXiv:2104.10326 / 2006.10550).
+  `make films` prints this and waits for "yes" (`--yes` to skip the prompt in CI you control).
+- Zones: TorchXRayVision PSPNet when `uv sync --extra films` is installed (lungs assigned by mean x so patient right =
+  image left), else template zones from a threshold lung mask + fitted heart ellipse. Both `approximate: true`.
+- Tests (4): all 13 categories map to §0 ids; `annotation_json` parsing (nested and flat polygons, unmapped category
+  logged + skipped); seeded selection is deterministic with ≥ 2 films per hard-region hint and 6 normals; template zones
+  keep the patient-side convention. Plus: badge flips to "Real films" when `data/films/index.json` exists and back to
+  "Synthetic films" when it is removed, with all tests green.
+- **Not run:** the actual download — needs the human's "yes" at the checkpoint.
