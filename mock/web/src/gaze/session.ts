@@ -10,6 +10,8 @@ export class GazeSession {
   private lastRaw: RawGaze | null = null;
   private lastFaceAt = 0;
   private listeners = new Set<() => void>();
+  private taps = new Set<(r: RawGaze) => void>();
+  private started = false;
   debugDot: { sx: number; sy: number } | null = null;
   status: GazeStatus = 'off';
   readonly debug: boolean;
@@ -26,15 +28,19 @@ export class GazeSession {
   onChange(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private emit() { for (const l of this.listeners) l(); }
 
-  /** Start receiving samples from the provider (after calibration). */
+  /** Tap the raw sample stream (calibration, validation, drift check). */
+  tapRaw(fn: (r: RawGaze) => void) { this.taps.add(fn); return () => { this.taps.delete(fn); }; }
+
+  /** Start receiving samples from the provider. Idempotent. */
   begin() {
-    this.provider.start((raw) => this.onRaw(raw));
+    if (!this.started) { this.started = true; this.provider.start((raw) => this.onRaw(raw)); }
     this.status = this.meta.quality_tier === 'poor' ? 'low' : 'tracking';
     this.emit();
   }
 
   private onRaw(raw: RawGaze) {
     this.lastRaw = raw;
+    for (const t of this.taps) t(raw);
     const now = performance.now();
     this.rateWindow.push(now);
     while (this.rateWindow.length && now - this.rateWindow[0]! > 2000) this.rateWindow.shift();
@@ -66,7 +72,8 @@ export class GazeSession {
     if (!this.buffer) return undefined;
     const samples = this.buffer.drain();
     this.buffer.stop(); this.buffer = null;
-    this.meta = { ...this.meta, inference_hz: Math.round(this.inferenceHz * 10) / 10 };
+    const lat = (this.provider as unknown as { latencyMs?: number }).latencyMs;
+    this.meta = { ...this.meta, inference_hz: Math.round(this.inferenceHz * 10) / 10, ...(lat ? { pipeline_latency_ms: Math.round(lat) } : {}) };
     return { samples, meta: this.meta };
   }
 

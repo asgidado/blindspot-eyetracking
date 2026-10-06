@@ -160,6 +160,60 @@ def submit(cid: str, body: Submit) -> dict:
     }
 
 
+class ReplayBody(BaseModel):
+    """A session export (GET /sessions/{id}/export) uploaded for replay. Re-analysed; never stored."""
+
+    model_config = {"extra": "allow"}
+    attempts: list[dict[str, Any]]
+    gaze_meta: dict[str, Any] | None = None
+    name: str = "Recorded session"
+    synthetic: bool = True
+
+
+@api.post("/replay")
+def replay(body: ReplayBody) -> dict:
+    out = []
+    pseudo = {"synthetic": body.synthetic, "attempts": [], "name": body.name, "gaze_meta": body.gaze_meta}
+    for a in body.attempts:
+        try:
+            case = cases.load_case(a["case_id"])
+        except KeyError:
+            out.append({"case_id": a.get("case_id"), "error": "case not available in this install"})
+            continue
+        r = analyse_attempt(
+            case,
+            a.get("marks", []),
+            a.get("normal", False),
+            a.get("globals", []),
+            a.get("telemetry", []),
+            a.get("gaze"),
+            body.gaze_meta,
+            pseudo,
+            a.get("read_ms"),
+        )
+        pseudo["attempts"].append({"case_id": a["case_id"], "result": r})
+        out.append(
+            r
+            | {
+                "case_id": case["id"],
+                "width": case["width"],
+                "height": case["height"],
+                "reveal": {
+                    "zones": case["zones"],
+                    "findings": case["findings"],
+                    "global_findings": case.get("global_findings", []),
+                },
+            }
+        )
+    return {
+        "recorded": True,
+        "name": body.name,
+        "synthetic": body.synthetic,
+        "results": out,
+        "summary": session_summary(pseudo),
+    }
+
+
 @api.get("/sessions/{sid}/summary")
 def summary(sid: str) -> dict:
     try:

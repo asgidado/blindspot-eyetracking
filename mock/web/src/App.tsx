@@ -5,10 +5,11 @@ import { About } from './About';
 import { ReadingRoom } from './ReadingRoom';
 import { Reveal } from './Reveal';
 import { Summary } from './Summary';
+import { RecordedReplay } from './Replay';
 import { GazeSetup } from './gaze/GazeSetup';
 import type { GazeSession } from './gaze/session';
 
-type Screen = { k: 'landing' } | { k: 'about' } | { k: 'calibrate'; choice: LandingChoice } | { k: 'read'; kase: NextCase } | { k: 'reveal'; kase: NextCase; result: any } | { k: 'summary' } | { k: 'drift'; kase: NextCase };
+type Screen = { k: 'landing' } | { k: 'about' } | { k: 'calibrate'; choice: LandingChoice } | { k: 'read'; kase: NextCase } | { k: 'reveal'; kase: NextCase; result: any } | { k: 'summary' } | { k: 'drift'; kase: NextCase } | { k: 'replay'; data: any };
 
 export function App() {
   const [cfg, setCfg] = useState<Config | null>(null);
@@ -31,6 +32,13 @@ export function App() {
 
   const onStart = (choice: LandingChoice) => {
     if (choice.name === 'about') return setScreen({ k: 'about' });
+    if (choice.replayFile) {
+      choice.replayFile.text().then(async (txt) => {
+        const r = await fetch('/api/replay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: txt });
+        setScreen({ k: 'replay', data: await r.json() });
+      }).catch((e) => alert(`Could not replay: ${e}`));
+      return;
+    }
     if (choice.gaze || choice.demo) return setScreen({ k: 'calibrate', choice });
     void startSession(choice, null);
   };
@@ -58,9 +66,10 @@ export function App() {
       {screen.k === 'landing' && <Landing cfg={cfg} onStart={onStart} />}
       {screen.k === 'about' && <About onBack={() => setScreen({ k: 'landing' })} />}
       {screen.k === 'calibrate' && <GazeSetup cfg={cfg} choice={screen.choice} onDone={(g) => startSession(screen.choice, g)} onSkip={() => startSession({ ...screen.choice, gaze: false }, null)} />}
-      {screen.k === 'drift' && gaze && <GazeSetup cfg={cfg} choice={{ name: session!.name, gaze: true, demo: false, study: session!.study }} drift={gaze} onDone={() => setScreen({ k: 'read', kase: screen.kase })} onSkip={() => setScreen({ k: 'read', kase: screen.kase })} />}
+      {screen.k === 'drift' && gaze && <GazeSetup cfg={cfg} choice={{ name: session!.name, gaze: true, demo: false, study: session!.study }} drift={gaze} onDone={(g) => { void api.putGazeMeta(session!.id, g.meta); setScreen({ k: 'read', kase: screen.kase }); }} onSkip={() => setScreen({ k: 'read', kase: screen.kase })} />}
       {screen.k === 'read' && session && <ReadingRoom cfg={cfg} session={session} kase={screen.kase} gaze={gaze} onResult={(result) => setScreen({ k: 'reveal', kase: screen.kase, result })} />}
       {screen.k === 'reveal' && <Reveal cfg={cfg} kase={screen.kase} result={screen.result} onNext={next} last={screen.kase.index + 1 >= screen.kase.total} />}
+      {screen.k === 'replay' && <RecordedReplay cfg={cfg} data={screen.data} onExit={() => setScreen({ k: 'landing' })} />}
       {screen.k === 'summary' && session && <Summary session={session} onRestart={() => { setSession(null); setGaze(null); setScreen({ k: 'landing' }); }} />}
       <footer className="bottom">For education. Not for clinical use.</footer>
     </div>

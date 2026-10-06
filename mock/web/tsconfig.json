@@ -20,6 +20,7 @@
   ],
   "exclude": [
     "**/*.test.ts",
-    "**/*.test.tsx"
+    "**/*.test.tsx",
+    "../../packages/**/*.test.ts"
   ]
 }

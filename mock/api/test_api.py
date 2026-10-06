@@ -69,3 +69,20 @@ def test_overcall_and_mislabel(tmp_path, monkeypatch):
     ).json()
     sc = r["scoring"]
     assert sc["summary"]["n_mislabeled"] == 1 and sc["summary"]["n_overcalls"] == 1
+
+
+def test_replay_reanalyses_an_export(tmp_path, monkeypatch):
+    from mock.api import store
+
+    monkeypatch.setattr(store, "SESSIONS", tmp_path)
+    s = c.post("/api/sessions", json={"name": "t", "study": True}).json()
+    nxt = c.get("/api/cases/next", params={"session": s["id"]}).json()
+    c.post(
+        f"/api/attempts/{nxt['id']}/submit",
+        json={"session": s["id"], "marks": [], "normal": True, "telemetry": [], "read_ms": 500},
+    )
+    exp = c.get(f"/api/sessions/{s['id']}/export").json()
+    r = c.post("/api/replay", json=exp).json()
+    assert r["recorded"] is True and len(r["results"]) == 1
+    assert r["results"][0]["scoring"]["summary"]["n_missed"] == 2
+    assert r["results"][0]["reveal"]["findings"]
