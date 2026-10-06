@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": [
+      "vite/client"
+    ],
+    "paths": {
+      "@gaze/*": [
+        "../../packages/gaze-web/src/*"
+      ]
+    },
+    "baseUrl": "."
+  },
+  "include": [
+    "src",
+    "../../packages/gaze-web/src",
+    "../../shared/schemas/index.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
+}
